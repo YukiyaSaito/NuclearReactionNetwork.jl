@@ -1,0 +1,13 @@
+name = "NuclearReactionNetwork"
+uuid = "a7ba2b4c-5c8a-4117-add0-163f5ea5e167"
+authors = ["Yukiya Saito <saito@triumf.ca>"]
+version = "0.1.0"
+
+[compat]
+julia = "1"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
