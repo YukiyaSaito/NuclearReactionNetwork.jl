@@ -3,6 +3,11 @@ uuid = "a7ba2b4c-5c8a-4117-add0-163f5ea5e167"
 authors = ["Yukiya Saito <saito@triumf.ca>"]
 version = "0.1.0"
 
+[deps]
+DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Pardiso = "46dd5b70-b6fb-5a00-ae2d-e8fea33afaf2"
+
 [compat]
 julia = "1"
 
