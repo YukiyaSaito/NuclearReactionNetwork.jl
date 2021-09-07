@@ -1,6 +1,7 @@
 using ..ReactionTypes
 using ..Network
 using ..NetworkSolve
+using ..Astro
 using LinearAlgebra
 using SparseArrays
 using Printf
@@ -23,7 +24,10 @@ end
 function read_test(path::String)
     BLAS.set_num_threads(4)
     reaction_data::ReactionData = initialize_reactions()
-    reaction_data = read_probdecay!("/Users/yukiya/Documents/Physics/PhD/prism/input/nuclear/Nubase/betam_nubase2016_moller.dat", reaction_data)
+    read_probdecay!("/Users/yukiya/Documents/Physics/PhD/prism/input/nuclear/Nubase/betam_nubase2016_moller.dat", reaction_data)
+    read_ncap!("/Users/yukiya/Documents/Physics/PhD/ReactionNetwork.jl/Reaclib_ng.dat", reaction_data)
+    trajectory = read_trajectory("/Users/yukiya/Documents/Physics/PhD/prism/input/examples/conditions/rprocess-dynamical-merger_trajectory")
+    # display(reaction_data.neutroncapture[[[0,1],[55,110]]])
     extent = read_boundary(path)
     # println(extent)
     networksize = get_networksize(extent)
@@ -33,7 +37,7 @@ function read_test(path::String)
     # println(typeof(zn_to_index_dict))
     # println(zn_to_index_dict)
     abundance = initialize_abundance(networksize)
-    abundance = read_initial_abundance("/Users/yukiya/Documents/Physics/PhD/prism/input/examples/conditions/rprocess-wind_initx",abundance,zn_to_index_dict)
+    abundance = read_initial_abundance("/Users/yukiya/Documents/Physics/PhD/prism/input/examples/conditions/rprocess-dynamical-merger_initx",abundance,zn_to_index_dict)
     display(check_mass_fraction_unity(abundance,mass_vector))
     display(abundance)
     ydot = initialize_ydot(networksize)
@@ -42,10 +46,10 @@ function read_test(path::String)
     timestep, current_time = initialize_timestep()
     jacobian = initialize_and_fill_sparse_jacobian(networksize,abundance,reaction_data,zn_to_index_dict,timestep)
     # display(jacobian)
-    time_limit::Float64 = 10.0
+    time_limit::Float64 = 20.0
     # display(abundance[zn_to_index_dict[[54,93]]])
     # display(reaction_data.probdecay[[[0,1]]].rate)
-    SolveNetwork!(abundance,jacobian,reaction_data,ydot ,timestep, current_time, mass_vector,time_limit,zn_to_index_dict)
+    SolveNetwork!(abundance, jacobian, reaction_data, ydot, timestep, current_time, mass_vector, time_limit, zn_to_index_dict)
     # Profile.print()
     # ydelta = Vector{Float64}(undef,size(abundance)[1])
     # yproposed = Vector{Float64}(undef,size(abundance)[1])

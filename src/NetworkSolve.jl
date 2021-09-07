@@ -43,7 +43,7 @@ end
 
 function initialize_timestep()
     #to do: summarize this in mutable struct
-    timestep::Float64 = 1e-2
+    timestep::Float64 = 1e-15
     current_time::Float64 = 0
     return timestep, current_time
 end
@@ -89,6 +89,12 @@ function fill_probdecay_ydot!(ydot::Vector{Float64}, abundance::Vector{Float64},
     end
 end
 
+function update_ydot!(ydot::Vector{Float64}, abundance::Vector{Float64}, reaction_data::ReactionData, zn_to_index_dict::Dict{Vector{Int64},Int64})
+    initialize_ydot!(ydot)
+    fill_probdecay_ydot!(ydot,abundance,reaction_data,zn_to_index_dict)
+end
+
+
 function fill_initial_abundance!(abundance_index::Matrix{Int64},abundance_vector::Vector{Float64},abundance::Vector{Float64},zn_to_index_dict::Dict{Vector{Int64},Int64})
     neutron_num::Int64 = 0
     proton_num::Int64 = 0
@@ -131,11 +137,11 @@ function read_initial_abundance(path::String, abundance::Vector{Float64},zn_to_i
     fill_initial_abundance!(abundance_index,abundance_vector,abundance,zn_to_index_dict)
 end
 
-function fill_jacobian!(jacobian::Matrix{Float64}, abundance::Vector{Float64},reaction_data::ReactionData, zn_to_index_dict::Dict{Vector{Int64},Int64},timestep::Float64)
+function fill_jacobian!(jacobian::Union{Matrix{Float64},SparseMatrixCSC{Float64, Int64}}, abundance::Vector{Float64},reaction_data::ReactionData, zn_to_index_dict::Dict{Vector{Int64},Int64},timestep::Float64)
     # jacobian = Matrix{Float64}(0*I,size(jacobian)) #Jacobian coordinate: (reactant, product)
-    # if typeof(jacobian)==SparseMatrixCSC{Float64, Int64}
-    #     mul!(jacobian,jacobian,0)
-    # end    
+    if typeof(jacobian)==SparseMatrixCSC{Float64, Int64}
+        mul!(jacobian,jacobian,0)
+    end    
     for (key, value) in reaction_data.probdecay
         if haskey(zn_to_index_dict,value.reactant[1])
             jacobian[zn_to_index_dict[value.reactant[1]], zn_to_index_dict[value.reactant[1]]] += -1.0 * value.rate
@@ -207,6 +213,7 @@ function check_mass_fraction_unity(yproposed::Vector{Float64},mass_vector::Vecto
     # mass_fraction_sum::Float64 = 0
     # mass_fraction_sum = dot(yproposed,mass_vector)
     # display(mass_fraction_sum)
+    # println(abs(1-dot(yproposed,mass_vector)))
     if abs(1-dot(yproposed,mass_vector))<1e-10
         return true
     else
@@ -233,23 +240,31 @@ function lu_dot!(F::UmfpackLU, S::SparseMatrixCSC{<:UMFVTypes,<:UMFITypes}; chec
 end
 
 
-function newton_raphson_iteration!(abundance::Vector{Float64},yproposed::Vector{Float64},jacobian::SparseMatrixCSC{Float64, Int64},F::UmfpackLU, ydot::Vector{Float64}, ydelta::Vector{Float64} ,timestep::Float64, current_time::Float64, mass_vector::Vector{Float64})
+function newton_raphson_iteration!(abundance::Vector{Float64},yproposed::Vector{Float64},jacobian::SparseMatrixCSC{Float64, Int64},F::UmfpackLU, ydot::Vector{Float64}, ydelta::Vector{Float64} ,timestep::Float64, current_time::Float64, mass_vector::Vector{Float64},reaction_data::ReactionData,zn_to_index_dict::Dict{Vector{Int64},Int64})
     yproposed .= abundance
     # println("ok so far")
-    # lu_dot!(F,jacobian); 
-    # ldiv!(ydelta,F,ydot)
+    lu_dot!(F,jacobian); 
+    ldiv!(ydelta,F,(ydot.-(yproposed.-abundance)./timestep))
     # display(ydelta)
+    # @printf "%e\n" timestep
     # yproposed[:] .+= ydelta
-    ydelta .= jacobian \ ydot
+    display(jacobian[1,1])
+    # display(ydelta)
+    # ydelta .= jacobian \ ydot
     yproposed .+= ydelta
     if check_mass_fraction_unity(yproposed, mass_vector) == true
+        display(check_mass_fraction_unity(yproposed, mass_vector))
         # ydelta .= yproposed .- abundance
-        abundance .= yproposed
-        current_time += timestep
     else 
-        error("not converged")
+        while check_mass_fraction_unity(yproposed, mass_vector) == false
+            fill_jacobian!(jacobian, yproposed, reaction_data, zn_to_index_dict, timestep)
+            # println(current_time)
+            update_ydot!(ydot,yproposed,reaction_data,zn_to_index_dict)
+            error("not converged")
+        end
     end
-
+    abundance .= yproposed
+    current_time += timestep
     # elseif converged == false
     #     while converged == false
     #         yproposed = jacobian \ (ydot - )
@@ -263,60 +278,68 @@ function newton_raphson_iteration!(abundance::Vector{Float64},yproposed::Vector{
 end
 
 function update_timestep_size(abundance::Vector{Float64}, ydelta::Vector{Float64}, timestep::Float64)
-    dely_delt::Vector{Float64} = ydelta[abundance.>1e-10]./abundance[abundance.>1e-10]
-    # dely_delt[isnan.(dely_delt)] .= Inf
-    # display(dely_delt)
-    # display(min(2, 2*timestep, 0.1*timestep/maximum(dely_delt)))
-    @printf "min(%e, %e, %e) = %e\n" 2.0 2*timestep 0.1*timestep/maximum(dely_delt) min(2.0, 2*timestep, 0.1*timestep/maximum(dely_delt))
-    return min(2.0, 2*timestep, 0.1*timestep/maximum(dely_delt))
-end
-
-function newton_raphson_iteration!(abundance::Vector{Float64},yproposed::Vector{Float64},jacobian::SparseMatrixCSC{Float64, Int64},ps::MKLPardisoSolver, ydot::Vector{Float64}, ydelta::Vector{Float64} ,timestep::Float64, current_time::Float64, mass_vector::Vector{Float64})
-    yproposed .= abundance
-    # println("ok so far")
-    solve!(ps, ydelta, jacobian, ydot)
-    yproposed .+= ydelta
-    # yproposed += jacobian \ ydot
-
-    if check_mass_fraction_unity(yproposed, mass_vector) == true
-        # ydelta .= yproposed .- abundance
-        abundance .= yproposed
-        # current_time += timestep
-    else 
-
-        error("not converged")
+    dely_delt::Vector{Float64} = abs.(ydelta[abundance.>1e-9]./abundance[abundance.>1e-9])
+    if maximum(dely_delt)==0
+        return 2*timestep
+    else
+        return min(2*timestep, 0.25*timestep/maximum(dely_delt))
     end
-
-    # elseif converged == false
-    #     while converged == false
-    #         yproposed = jacobian \ (ydot - )
-
-
-    # yproposed::Vector{Float64} = copy(abundance)
-    # jacobian_inv::Matrix{Float64} = inv(jacobian)
-    # yproposed = yproposed + jacobian_inv * ydot
-    # yproposed::Vector{Float64} = jacobian \ ydot + yproposed
-    return current_time += timestep
+    # dely_delt[isnan.(dely_delt)] .= Inf
+    # display(ydelta[abundance.>1e-25])
+    # display(min(2, 2*timestep, 0.1*timestep/maximum(dely_delt)))
+    # @printf "min(%e, %e, %e) = %e\n" 0.1 2*timestep 0.1*timestep/maximum(dely_delt) min(0.1, 2*timestep, 0.1*timestep/maximum(dely_delt))
+    # return min(1e-4,1e-4,1e-4)
 end
+
+# function newton_raphson_iteration!(abundance::Vector{Float64},yproposed::Vector{Float64},jacobian::SparseMatrixCSC{Float64, Int64},ps::MKLPardisoSolver, ydot::Vector{Float64}, ydelta::Vector{Float64} ,timestep::Float64, current_time::Float64, mass_vector::Vector{Float64})
+#     yproposed .= abundance
+#     # println("ok so far")
+#     solve!(ps, ydelta, jacobian, ydot)
+#     yproposed .+= ydelta
+#     # yproposed += jacobian \ ydot
+
+#     if check_mass_fraction_unity(yproposed, mass_vector) == true
+#         # ydelta .= yproposed .- abundance
+#         abundance .= yproposed
+#         # current_time += timestep
+#     else 
+
+#         error("not converged")
+#     end
+
+#     # elseif converged == false
+#     #     while converged == false
+#     #         yproposed = jacobian \ (ydot - )
+
+
+#     # yproposed::Vector{Float64} = copy(abundance)
+#     # jacobian_inv::Matrix{Float64} = inv(jacobian)
+#     # yproposed = yproposed + jacobian_inv * ydot
+#     # yproposed::Vector{Float64} = jacobian \ ydot + yproposed
+#     return current_time += timestep
+# end
 
 function SolveNetwork!(abundance::Vector{Float64},jacobian::SparseMatrixCSC{Float64, Int64},reaction_data::ReactionData,ydot::Vector{Float64} ,timestep::Float64, current_time::Float64, mass_vector::Vector{Float64},time_limit::Float64,zn_to_index_dict::Dict{Vector{Int64},Int64})
     ydelta = Vector{Float64}(undef,size(abundance)[1])
     yproposed = Vector{Float64}(undef,size(abundance)[1])
     F = lu(jacobian)
-    print_time_step::Float64 = 0.1
+    print_time_step::Float64 = 10.0
     # ps = MKLPardisoSolver()
     while current_time < time_limit
-        current_time = newton_raphson_iteration!(abundance,yproposed,jacobian, F ,ydot, ydelta,timestep, current_time, mass_vector)
+        current_time = newton_raphson_iteration!(abundance,yproposed,jacobian, F ,ydot, ydelta,timestep, current_time, mass_vector,reaction_data,zn_to_index_dict)
+        # display(current_time)
         # display(ydot)
-        initialize_ydot!(ydot)
-        fill_probdecay_ydot!(ydot,abundance,reaction_data,zn_to_index_dict)
+        timestep = update_timestep_size(abundance, ydelta, timestep)
+        fill_jacobian!(jacobian, abundance, reaction_data, zn_to_index_dict, timestep)
+        # println(current_time)
+        update_ydot!(ydot,abundance,reaction_data,zn_to_index_dict)
         # display(ydot)
-        # timestep = update_timestep_size(abundance, ydelta, timestep)
-        if current_time > print_time_step
+        @printf "[%e, %e],\n" current_time abundance[zn_to_index_dict[[0,1]]]
+        # if current_time > print_time_step
             # println(ydot)
-            @printf "[%f, %e],\n" current_time abundance[zn_to_index_dict[[54,93]]]
-            print_time_step += 0.1
-        end
+            # @printf "[%f, %e],\n" current_time abundance[zn_to_index_dict[[0,1]]]
+            # print_time_step += 10.0
+        # end
         # @printf "%e\n" current_time
     end
 end

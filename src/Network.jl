@@ -14,6 +14,7 @@ end
 # to do: organize zn_to_index_dict and mass_vector into struct
 
 function read_boundary(path::String)
+    #Read Fortran formatted extent file. It determines the limit on the nuclear chart.
     raw_boundary::Matrix{Int64} = readdlm(path,' ',Int)
     fill_boundary(raw_boundary)
 end
@@ -22,7 +23,7 @@ function fill_boundary(raw_boundary::Matrix{Int64}) # Function berriering
     return NetworkBoundary(raw_boundary)
 end
 
-function get_networksize(networkboundary::NetworkBoundary)
+function get_networksize(networkboundary::NetworkBoundary) #Get the number of spicies included in the network
     boundary = networkboundary.matrix
     networksize::Int64 = 0
     # println(size(boundary,1))
@@ -36,6 +37,7 @@ function get_networksize(networkboundary::NetworkBoundary)
 end
 
 function zn_to_index(networkboundary::NetworkBoundary)
+#index all the nuclear spicies. Map [z,n] -> index.
     boundary::Matrix{Int64} = networkboundary.matrix
     zn_to_index_dict = Dict{Vector{Int64},Int64}()
     index::Int64 = 1
