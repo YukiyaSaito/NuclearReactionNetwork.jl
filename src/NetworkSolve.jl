@@ -59,10 +59,10 @@ end
 
 
 function fill_probdecay_ydot!(ydot::Vector{Float64}, abundance::Vector{Float64}, reaction_data::ReactionData, net_idx::NetworkIndex)
-    for (key, value) in reaction_data.probdecay
-        if zn_in_network(value.reactant[1]..., net_idx)
-            reactant_idx = zn_to_index(value.reactant[1]..., net_idx)
-            ydot[reactant_idx] += -1.0 * value.rate * abundance[reactant_idx]
+    for (_, decay) in reaction_data.probdecay
+        if zn_in_network(decay.reactant[1]..., net_idx)
+            reactant_idx = zn_to_index(decay.reactant[1]..., net_idx)
+            ydot[reactant_idx] += -1.0 * decay.rate * abundance[reactant_idx]
             # @printf "%d: %.10f += -1.0 * %f * %f\n" zn_to_index_dict[value.reactant[1]] ydot[zn_to_index_dict[value.reactant[1]]] value.rate abundance[zn_to_index_dict[value.reactant[1]]]
             # println("yes")
             # display(ydot[zn_to_index_dict[value.reactant[1]]])
@@ -70,16 +70,16 @@ function fill_probdecay_ydot!(ydot::Vector{Float64}, abundance::Vector{Float64},
             # throw(DomainError(value.reactant[1],"The species outside the reaction network."))
             continue
         end
-        for product_num in 1:size(value.product)[1]
-            if zn_in_network(value.product[product_num]..., net_idx)
+        for product_num in 1:size(decay.product)[1]
+            if zn_in_network(decay.product[product_num]..., net_idx)
                 # println(value.reactant[1])
                 # println(value.product[product_num])
-                ydot[zn_to_index(value.product[product_num]..., net_idx)] += value.average_number[product_num] * value.rate * abundance[zn_to_index(value.reactant[1]..., net_idx)]
-            elseif value.rate==0.0 || value.average_number[product_num]==0.0
+                ydot[zn_to_index(decay.product[product_num]..., net_idx)] += decay.average_number[product_num] * decay.rate * abundance[zn_to_index(decay.reactant[1]..., net_idx)]
+            elseif decay.rate==0.0 || decay.average_number[product_num]==0.0
                 # throw(DomainError(value.product[product_num],"The species outside the reaction network."))
                 continue
             else
-                throw(DomainError(value.product[product_num],"The species outside the reaction network."))
+                throw(DomainError(decay.product[product_num],"The species outside the reaction network."))
             end
         end
         # println(value.product[1])
@@ -143,25 +143,25 @@ function fill_jacobian!(jacobian::Union{Matrix{Float64},SparseMatrixCSC{Float64,
     if typeof(jacobian)==SparseMatrixCSC{Float64, Int64}
         mul!(jacobian,jacobian,0)
     end    
-    for (key, value) in reaction_data.probdecay
-        if zn_in_network(value.reactant[1]..., net_idx)
-            reactant_idx = zn_to_index(value.reactant[1]..., net_idx)
-            jacobian[reactant_idx, reactant_idx] += -1.0 * value.rate
+    for (_, decay) in reaction_data.probdecay
+        if zn_in_network(decay.reactant[1]..., net_idx)
+            reactant_idx = zn_to_index(decay.reactant[1]..., net_idx)
+            jacobian[reactant_idx, reactant_idx] += -1.0 * decay.rate
             # println("yes")
         else 
             # throw(DomainError(value.reactant[1],"The species outside the reaction network."))
             continue
         end
-        for product_num in 1:size(value.product)[1]
-            if zn_in_network(value.product[product_num]..., net_idx)
+        for product_num in 1:size(decay.product)[1]
+            if zn_in_network(decay.product[product_num]..., net_idx)
                 # println(value.reactant[1])
                 # println(value.product[product_num])
-                jacobian[zn_to_index(value.product[product_num]..., net_idx), zn_to_index(value.reactant[1]..., net_idx)] += value.average_number[product_num] * value.rate
-            elseif value.rate==0.0 || value.average_number[product_num]==0.0
+                jacobian[zn_to_index(decay.product[product_num]..., net_idx), zn_to_index(decay.reactant[1]..., net_idx)] += decay.average_number[product_num] * decay.rate
+            elseif decay.rate==0.0 || decay.average_number[product_num]==0.0
                 # throw(DomainError(value.product[product_num],"The species outside the reaction network."))
                 continue
             else
-                throw(DomainError(value.product[product_num],"The species outside the reaction network."))
+                throw(DomainError(decay.product[product_num],"The species outside the reaction network."))
             end
         end
         # println(value.product[1])
