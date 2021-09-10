@@ -58,10 +58,11 @@ function initialize_ydot!(ydot::Vector{Float64})
 end
 
 
-function fill_probdecay_ydot!(ydot::Vector{Float64}, abundance::Vector{Float64}, reaction_data::ReactionData, zn_to_index_dict::Dict{Vector{Int64},Int64})
+function fill_probdecay_ydot!(ydot::Vector{Float64}, abundance::Vector{Float64}, reaction_data::ReactionData, net_idx::NetworkIndex)
     for (key, value) in reaction_data.probdecay
-        if haskey(zn_to_index_dict,value.reactant[1])
-            ydot[zn_to_index_dict[value.reactant[1]]] += -1.0 * value.rate * abundance[zn_to_index_dict[value.reactant[1]]]
+        if zn_in_network(value.reactant[1]..., net_idx)
+            reactant_idx = zn_to_index(value.reactant[1]..., net_idx)
+            ydot[reactant_idx] += -1.0 * value.rate * abundance[reactant_idx]
             # @printf "%d: %.10f += -1.0 * %f * %f\n" zn_to_index_dict[value.reactant[1]] ydot[zn_to_index_dict[value.reactant[1]]] value.rate abundance[zn_to_index_dict[value.reactant[1]]]
             # println("yes")
             # display(ydot[zn_to_index_dict[value.reactant[1]]])
@@ -70,10 +71,10 @@ function fill_probdecay_ydot!(ydot::Vector{Float64}, abundance::Vector{Float64},
             continue
         end
         for product_num in 1:size(value.product)[1]
-            if haskey(zn_to_index_dict, value.product[product_num])
+            if zn_in_network(value.product[product_num]..., net_idx)
                 # println(value.reactant[1])
                 # println(value.product[product_num])
-                ydot[zn_to_index_dict[value.product[product_num]]] += value.average_number[product_num] * value.rate * abundance[zn_to_index_dict[value.reactant[1]]]
+                ydot[zn_to_index(value.product[product_num]..., net_idx)] += value.average_number[product_num] * value.rate * abundance[zn_to_index(value.reactant[1]..., net_idx)]
             elseif value.rate==0.0 || value.average_number[product_num]==0.0
                 # throw(DomainError(value.product[product_num],"The species outside the reaction network."))
                 continue
@@ -89,13 +90,13 @@ function fill_probdecay_ydot!(ydot::Vector{Float64}, abundance::Vector{Float64},
     end
 end
 
-function update_ydot!(ydot::Vector{Float64}, abundance::Vector{Float64}, reaction_data::ReactionData, zn_to_index_dict::Dict{Vector{Int64},Int64})
+function update_ydot!(ydot::Vector{Float64}, abundance::Vector{Float64}, reaction_data::ReactionData, net_idx::NetworkIndex)
     initialize_ydot!(ydot)
-    fill_probdecay_ydot!(ydot,abundance,reaction_data,zn_to_index_dict)
+    fill_probdecay_ydot!(ydot, abundance, reaction_data, net_idx)
 end
 
 
-function fill_initial_abundance!(abundance_index::Matrix{Int64},abundance_vector::Vector{Float64},abundance::Vector{Float64},zn_to_index_dict::Dict{Vector{Int64},Int64})
+function fill_initial_abundance!(abundance_index::Matrix{Int64}, abundance_vector::Vector{Float64}, abundance::Vector{Float64}, net_idx::NetworkIndex)
     neutron_num::Int64 = 0
     proton_num::Int64 = 0
     A_massnum::Float64 = 0.0
@@ -104,20 +105,20 @@ function fill_initial_abundance!(abundance_index::Matrix{Int64},abundance_vector
         proton_num = abundance_index[i,1]
         neutron_num = abundance_index[i,2] - abundance_index[i,1]
         # println(abundance_index[i,:])
-        if haskey(zn_to_index_dict, [proton_num,neutron_num])
+        if zn_in_network(proton_num, neutron_num, net_idx)
             # println(sum(abundance_index[i,:]))
-            abundance[zn_to_index_dict[[proton_num,neutron_num]]] = abundance_vector[i]/A_massnum
+            abundance[zn_to_index(proton_num, neutron_num, net_idx)] = abundance_vector[i]/A_massnum
         else
             neutron_subtract::Int64 = 1
             # println(haskey(zn_to_index_dict, [abundance_index[i,1],abundance_index[i,2]-neutron_subtract]))
-            while !haskey(zn_to_index_dict, [abundance_index[i,1],abundance_index[i,2]-neutron_subtract])
+            while !zn_in_network(abundance_index[i, 1], abundance_index[i, 2] - neutron_subtract, net_idx)
                 # println(haskey(zn_to_index_dict, [abundance_index[i,1],abundance_index[i,2]-neutron_subtract]))
                 neutron_subtract += 1
                 # println(neutron_subtract)
             end				
             # println(typeof([abundance_index[i,1],abundance_index[i,2]-neutron_subtract]))
             
-            abundance[zn_to_index_dict[[abundance_index[i,1],abundance_index[i,2]-neutron_subtract]]] += abundance_vector[i]/A_massnum
+            abundance[zn_to_index(abundance_index[i, 1], abundance_index[i, 2] - neutron_subtract, net_idx)] += abundance_vector[i]/A_massnum
             @printf "Abundance for [%d, %d] added to [%d, %d]" abundance_index[i,1] abundance_index[i,2] abundance_index[i,1] abundance_index[i,2]-neutron_subtract
         end
         # @printf "[%d, %d]: %e\n" proton_num neutron_num abundance[zn_to_index_dict[[proton_num,neutron_num]]]
@@ -125,7 +126,7 @@ function fill_initial_abundance!(abundance_index::Matrix{Int64},abundance_vector
     return abundance
 end
 
-function read_initial_abundance(path::String, abundance::Vector{Float64},zn_to_index_dict::Dict{Vector{Int64},Int64})
+function read_initial_abundance(path::String, abundance::Vector{Float64}, net_idx::NetworkIndex)
     raw_abundance::Matrix{Float64} = readdlm(path)
     abundance_index::Matrix{Int64} = round.(Int,raw_abundance[:,1:2])
     abundance_vector::Vector{Float64} = raw_abundance[:,3]/sum(raw_abundance[:,3])
@@ -134,27 +135,28 @@ function read_initial_abundance(path::String, abundance::Vector{Float64},zn_to_i
     # for i in 1:size(abundance_index)[1]
     # 	println(typeof(abundance_index[i,:]))
     # end
-    fill_initial_abundance!(abundance_index,abundance_vector,abundance,zn_to_index_dict)
+    fill_initial_abundance!(abundance_index, abundance_vector, abundance, net_idx)
 end
 
-function fill_jacobian!(jacobian::Union{Matrix{Float64},SparseMatrixCSC{Float64, Int64}}, abundance::Vector{Float64},reaction_data::ReactionData, zn_to_index_dict::Dict{Vector{Int64},Int64},timestep::Float64)
+function fill_jacobian!(jacobian::Union{Matrix{Float64},SparseMatrixCSC{Float64, Int64}}, abundance::Vector{Float64}, reaction_data::ReactionData, net_idx::NetworkIndex, timestep::Float64)
     # jacobian = Matrix{Float64}(0*I,size(jacobian)) #Jacobian coordinate: (reactant, product)
     if typeof(jacobian)==SparseMatrixCSC{Float64, Int64}
         mul!(jacobian,jacobian,0)
     end    
     for (key, value) in reaction_data.probdecay
-        if haskey(zn_to_index_dict,value.reactant[1])
-            jacobian[zn_to_index_dict[value.reactant[1]], zn_to_index_dict[value.reactant[1]]] += -1.0 * value.rate
+        if zn_in_network(value.reactant[1]..., net_idx)
+            reactant_idx = zn_to_index(value.reactant[1]..., net_idx)
+            jacobian[reactant_idx, reactant_idx] += -1.0 * value.rate
             # println("yes")
         else 
             # throw(DomainError(value.reactant[1],"The species outside the reaction network."))
             continue
         end
         for product_num in 1:size(value.product)[1]
-            if haskey(zn_to_index_dict, value.product[product_num])
+            if zn_in_network(value.product[product_num]..., net_idx)
                 # println(value.reactant[1])
                 # println(value.product[product_num])
-                jacobian[zn_to_index_dict[value.product[product_num]],zn_to_index_dict[value.reactant[1]]] += value.average_number[product_num] * value.rate
+                jacobian[zn_to_index(value.product[product_num]..., net_idx), zn_to_index(value.reactant[1]..., net_idx)] += value.average_number[product_num] * value.rate
             elseif value.rate==0.0 || value.average_number[product_num]==0.0
                 # throw(DomainError(value.product[product_num],"The species outside the reaction network."))
                 continue
@@ -198,9 +200,9 @@ function fill_jacobian!(jacobian::Union{Matrix{Float64},SparseMatrixCSC{Float64,
     return jacobian
 end
 
-function initialize_and_fill_sparse_jacobian(networksize::Int64, abundance::Vector{Float64},reaction_data::ReactionData, zn_to_index_dict::Dict{Vector{Int64},Int64},timestep::Float64)
+function initialize_and_fill_sparse_jacobian(networksize::Int64, abundance::Vector{Float64}, reaction_data::ReactionData, net_idx::NetworkIndex, timestep::Float64)
     jacobian::Matrix{Float64} = initialize_jacobian(networksize)
-    fill_jacobian!(jacobian, abundance, reaction_data, zn_to_index_dict, timestep)
+    fill_jacobian!(jacobian, abundance, reaction_data, net_idx, timestep)
 end
 
 function newton_raphson_step(yproposed::Vector{Float64},jacobian::Matrix{Float64},jacobian_inv::Matrix{Float64},ydot::Vector{Float64})
@@ -240,7 +242,7 @@ function lu_dot!(F::UmfpackLU, S::SparseMatrixCSC{<:UMFVTypes,<:UMFITypes}; chec
 end
 
 
-function newton_raphson_iteration!(abundance::Vector{Float64},yproposed::Vector{Float64},jacobian::SparseMatrixCSC{Float64, Int64},F::UmfpackLU, ydot::Vector{Float64}, ydelta::Vector{Float64} ,timestep::Float64, current_time::Float64, mass_vector::Vector{Float64},reaction_data::ReactionData,zn_to_index_dict::Dict{Vector{Int64},Int64})
+function newton_raphson_iteration!(abundance::Vector{Float64}, yproposed::Vector{Float64}, jacobian::SparseMatrixCSC{Float64, Int64}, F::UmfpackLU, ydot::Vector{Float64}, ydelta::Vector{Float64}, timestep::Float64, current_time::Float64, reaction_data::ReactionData, net_idx::NetworkIndex)
     yproposed .= abundance
     # println("ok so far")
     lu_dot!(F,jacobian); 
@@ -252,14 +254,14 @@ function newton_raphson_iteration!(abundance::Vector{Float64},yproposed::Vector{
     # display(ydelta)
     # ydelta .= jacobian \ ydot
     yproposed .+= ydelta
-    if check_mass_fraction_unity(yproposed, mass_vector) == true
-        display(check_mass_fraction_unity(yproposed, mass_vector))
+    if check_mass_fraction_unity(yproposed, net_idx.mass_vector)
+        display(true)
         # ydelta .= yproposed .- abundance
     else 
-        while check_mass_fraction_unity(yproposed, mass_vector) == false
-            fill_jacobian!(jacobian, yproposed, reaction_data, zn_to_index_dict, timestep)
+        while !check_mass_fraction_unity(yproposed, net_idx.mass_vector) # TODO: Convert to a do-while style loop to avoid unnecessary computations
+            fill_jacobian!(jacobian, yproposed, reaction_data, net_idx, timestep)
             # println(current_time)
-            update_ydot!(ydot,yproposed,reaction_data,zn_to_index_dict)
+            update_ydot!(ydot, yproposed, reaction_data, net_idx)
             error("not converged")
         end
     end
@@ -319,22 +321,22 @@ end
 #     return current_time += timestep
 # end
 
-function SolveNetwork!(abundance::Vector{Float64},jacobian::SparseMatrixCSC{Float64, Int64},reaction_data::ReactionData,ydot::Vector{Float64} ,timestep::Float64, current_time::Float64, mass_vector::Vector{Float64},time_limit::Float64,zn_to_index_dict::Dict{Vector{Int64},Int64})
+function SolveNetwork!(abundance::Vector{Float64}, jacobian::SparseMatrixCSC{Float64, Int64}, reaction_data::ReactionData, ydot::Vector{Float64}, timestep::Float64, current_time::Float64,time_limit::Float64, net_idx::NetworkIndex)
     ydelta = Vector{Float64}(undef,size(abundance)[1])
     yproposed = Vector{Float64}(undef,size(abundance)[1])
     F = lu(jacobian)
     print_time_step::Float64 = 10.0
     # ps = MKLPardisoSolver()
     while current_time < time_limit
-        current_time = newton_raphson_iteration!(abundance,yproposed,jacobian, F ,ydot, ydelta,timestep, current_time, mass_vector,reaction_data,zn_to_index_dict)
+        current_time = newton_raphson_iteration!(abundance, yproposed, jacobian, F, ydot, ydelta, timestep, current_time, reaction_data, net_idx)
         # display(current_time)
         # display(ydot)
         timestep = update_timestep_size(abundance, ydelta, timestep)
-        fill_jacobian!(jacobian, abundance, reaction_data, zn_to_index_dict, timestep)
+        fill_jacobian!(jacobian, abundance, reaction_data, net_idx, timestep)
         # println(current_time)
-        update_ydot!(ydot,abundance,reaction_data,zn_to_index_dict)
+        update_ydot!(ydot, abundance, reaction_data, net_idx)
         # display(ydot)
-        @printf "[%e, %e],\n" current_time abundance[zn_to_index_dict[[0,1]]]
+        @printf "[%e, %e],\n" current_time abundance[zn_to_index(0, 1, net_idx)]
         # if current_time > print_time_step
             # println(ydot)
             # @printf "[%f, %e],\n" current_time abundance[zn_to_index_dict[[0,1]]]
