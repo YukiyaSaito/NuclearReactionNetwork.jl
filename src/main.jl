@@ -2,12 +2,12 @@ using ..ReactionTypes
 using ..Network
 using ..NetworkSolve
 using ..Astro
+using ..InOut
 using LinearAlgebra
 using SparseArrays
 using Printf
 using InteractiveUtils
 using Profile
-# using ..InOut
 
 export main
 export read_test
@@ -58,6 +58,9 @@ function read_test(path::String)
     #     current_time = newton_raphson_iteration!(abundance,yproposed,jacobian, F ,ydot, ydelta,timestep, current_time, mass_vector)
     #     # @printf "%e\n" current_time
     # end
+
+    res = Result(abundance, net_idx);
+    dump_result(res, "/Users/pvirally/Dropbox/Waterloo/Co-op/TRIUMF/output/Y.txt")
     
     # display(check_mass_fraction_unity(abundance,mass_vector))
     display(abundance)

@@ -5,15 +5,14 @@ include("./ReactionTypes.jl")
 include("./Network.jl")
 include("./Astro.jl")
 include("./NetworkSolve.jl")
-
-# include("./InOut.jl")
+include("./InOut.jl")
 
 include("./main.jl")
 
 import .ReactionTypes
 import .Network
 import .NetworkSolve
-# import .InOut
+import .InOut
 import .main
 
 # test
