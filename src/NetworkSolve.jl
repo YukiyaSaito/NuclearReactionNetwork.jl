@@ -1,4 +1,5 @@
 module NetworkSolve
+using ..Astro
 using ..Network
 using ..ReactionTypes
 using LinearAlgebra
@@ -12,10 +13,9 @@ using SuiteSparse: decrement
 using SuiteSparse.UMFPACK: UmfpackLU, UMFVTypes, UMFITypes, umfpack_numeric!
 using Pardiso
 
-
+export Time
 export initialize_jacobian
 export initialize_abundance
-export initialize_timestep
 export read_initial_abundance
 export fill_jacobian!
 export initialize_ydot
@@ -25,9 +25,17 @@ export initialize_and_fill_sparse_jacobian
 export check_mass_fraction_unity
 export SolveNetwork!
 
-# mutable struct timestep
-#     current_value::Float64
-# end
+mutable struct Time
+    current::Float64
+    step::Float64
+    stop::Float64
+    function Time(curr_time::Float64, time_step::Float64, stop_time::Float64)
+        return new(curr_time, time_step, stop_time)
+    end
+    function Time()
+        return new(0.0, 1e-15, 20.0)
+    end
+end
 
 function initialize_jacobian(networksize::Int64)
     # println(networksize)
@@ -39,13 +47,6 @@ end
 function initialize_abundance(networksize::Int64)
     abundance::Vector{Float64} = zeros(Float64,networksize)
     return abundance
-end
-
-function initialize_timestep()
-    #to do: summarize this in mutable struct
-    timestep::Float64 = 1e-15
-    current_time::Float64 = 0
-    return timestep, current_time
 end
 
 function initialize_ydot(networksize::Int64)
@@ -90,11 +91,48 @@ function fill_probdecay_ydot!(ydot::Vector{Float64}, abundance::Vector{Float64},
     end
 end
 
-function update_ydot!(ydot::Vector{Float64}, abundance::Vector{Float64}, reaction_data::ReactionData, net_idx::NetworkIndex)
-    initialize_ydot!(ydot)
-    fill_probdecay_ydot!(ydot, abundance, reaction_data, net_idx)
+function fill_neutroncapture_ydot!(ydot::Vector{Float64}, abundance::Vector{Float64}, reaction_data::ReactionData, net_idx::NetworkIndex, trajectory::Trajectory, time::Time)
+    curr_traj = get_current_trajectory(trajectory, time.current)
+    for capture in values(reaction_data.neutroncapture)
+        rate = capture.rate(curr_traj.temperature)
+        # Grab the product of all the abundances
+        abundance_factor = 1.0
+        for reactant in capture.reactant
+            z, n = reactant
+            if zn_in_network(z, n, net_idx)
+                reactant_idx = zn_to_index(z, n, net_idx)
+                abundance_factor *= abundance[reactant_idx]
+            end
+        end
+        if iszero(abundance_factor)
+            continue
+        end
+
+        # Update ydot for the reactants
+        for reactant in capture.reactant
+            z, n = reactant
+            if zn_in_network(z, n, net_idx)
+                reactant_idx = zn_to_index(z, n, net_idx)
+                ydot[reactant_idx] += -1.0 * curr_traj.density * rate * abundance_factor
+            end
+        end
+
+        # Update ydot for the products
+        for product in capture.product
+            z, n = product
+            if zn_in_network(z, n, net_idx)
+                product_idx = zn_to_index(z, n, net_idx)
+                ydot[product_idx] += rate * curr_traj.density * abundance_factor
+            end
+        end
+    end
 end
 
+function update_ydot!(ydot::Vector{Float64}, abundance::Vector{Float64}, reaction_data::ReactionData, net_idx::NetworkIndex, trajectory::Trajectory, time::Time)
+    initialize_ydot!(ydot)
+    fill_probdecay_ydot!(ydot, abundance, reaction_data, net_idx)
+    fill_neutroncapture_ydot!(ydot, abundance, reaction_data, net_idx, trajectory, time)
+end
 
 function fill_initial_abundance!(abundance_index::Matrix{Int64}, abundance_vector::Vector{Float64}, abundance::Vector{Float64}, net_idx::NetworkIndex)
     neutron_num::Int64 = 0
@@ -138,14 +176,11 @@ function read_initial_abundance(path::String, abundance::Vector{Float64}, net_id
     fill_initial_abundance!(abundance_index, abundance_vector, abundance, net_idx)
 end
 
-function fill_jacobian!(jacobian::Union{Matrix{Float64},SparseMatrixCSC{Float64, Int64}}, abundance::Vector{Float64}, reaction_data::ReactionData, net_idx::NetworkIndex, timestep::Float64)
-    # jacobian = Matrix{Float64}(0*I,size(jacobian)) #Jacobian coordinate: (reactant, product)
-    if typeof(jacobian)==SparseMatrixCSC{Float64, Int64}
-        mul!(jacobian,jacobian,0)
-    end    
+function fill_jacobian_probdecay!(jacobian::Union{Matrix{Float64},SparseMatrixCSC{Float64, Int64}}, reaction_data::ReactionData, net_idx::NetworkIndex)
     for (_, decay) in reaction_data.probdecay
-        if zn_in_network(decay.reactant[1]..., net_idx)
-            reactant_idx = zn_to_index(decay.reactant[1]..., net_idx)
+        z_r, n_r = decay.reactant[1]
+        if zn_in_network(z_r, n_r, net_idx)
+            reactant_idx = zn_to_index(z_r, n_r, net_idx)
             jacobian[reactant_idx, reactant_idx] += -1.0 * decay.rate
             # println("yes")
         else 
@@ -156,7 +191,9 @@ function fill_jacobian!(jacobian::Union{Matrix{Float64},SparseMatrixCSC{Float64,
             if zn_in_network(decay.product[product_num]..., net_idx)
                 # println(value.reactant[1])
                 # println(value.product[product_num])
-                jacobian[zn_to_index(decay.product[product_num]..., net_idx), zn_to_index(decay.reactant[1]..., net_idx)] += decay.average_number[product_num] * decay.rate
+                z_p, n_p = decay.product[product_num]
+                product_idx = zn_to_index(z_p, n_p, net_idx)
+                jacobian[product_idx, reactant_idx] += decay.average_number[product_num] * decay.rate
             elseif decay.rate==0.0 || decay.average_number[product_num]==0.0
                 # throw(DomainError(value.product[product_num],"The species outside the reaction network."))
                 continue
@@ -164,19 +201,79 @@ function fill_jacobian!(jacobian::Union{Matrix{Float64},SparseMatrixCSC{Float64,
                 throw(DomainError(decay.product[product_num],"The species outside the reaction network."))
             end
         end
-        # println(value.product[1])
-        # println(zn_to_index_dict[key[1]])
-        # println(key)
-        # println(value.rate)
-        # println(value)
     end
+end
+
+function fill_jacobian_neutroncapture!(jacobian::Union{Matrix{Float64},SparseMatrixCSC{Float64, Int64}}, abundance::Vector{Float64}, reaction_data::ReactionData, trajectory::Trajectory, net_idx::NetworkIndex, time::Time)
+    curr_traj = get_current_trajectory(trajectory, time.current)
+    if iszero(curr_traj.density)
+        println("Zero density")
+        return
+    end
+
+    # TODO: Convert this to a loop instead of 6 hard coded changes to the jacobian?
+    for capture in values(reaction_data.neutroncapture)
+        rate = capture.rate(curr_traj.temperature)
+        if iszero(rate)
+            println("Zero rate")
+            continue
+        end
+
+        # Neutron index and abundance
+        if !zn_in_network(0, 1, net_idx) # TODO: Are neutrons always in the network making this check redundant?
+            continue
+        end
+        neutron_idx = zn_to_index(0, 1, net_idx)
+        neutron_abundance = abundance[neutron_idx]
+
+        # Reactant index and abundance
+        reactant = capture.reactant[2]
+        z_r, n_r = reactant
+        if !zn_in_network(z_r, n_r, net_idx)
+            continue
+        end
+        reactant_idx = zn_to_index(z_r, n_r, net_idx)
+        reactant_abundance = abundance[reactant_idx]
+
+        # Product index
+        product = capture.product[1]
+        z_p, n_p = product
+        if !zn_in_network(z_p, n_p, net_idx)
+            continue
+        end
+        product_idx = zn_to_index(z_p, n_p, net_idx)
+
+        # Doule counting factor TODO: Is this always 1.0?
+        dc_factor = reactant_idx == product_idx ? 0.5 : 1.0
+
+        # Reactants
+        jacobian[reactant_idx, reactant_idx] -= dc_factor * curr_traj.density * rate * neutron_abundance  # J_RR
+        jacobian[reactant_idx, neutron_idx]  -= dc_factor * curr_traj.density * rate * reactant_abundance # J_Rn
+        jacobian[neutron_idx, reactant_idx]  -= dc_factor * curr_traj.density * rate * neutron_abundance  # J_nR
+        jacobian[neutron_idx, neutron_idx]   -= dc_factor * curr_traj.density * rate * reactant_abundance # J_nn
+
+        # Products
+        jacobian[product_idx, reactant_idx]  += dc_factor * curr_traj.density * rate * neutron_abundance  # J_PR
+        jacobian[product_idx, neutron_idx]   += dc_factor * curr_traj.density * rate * reactant_abundance # J_Pn
+    end
+end
+
+function fill_jacobian!(jacobian::Union{Matrix{Float64},SparseMatrixCSC{Float64, Int64}}, abundance::Vector{Float64}, reaction_data::ReactionData, trajectory::Trajectory, net_idx::NetworkIndex, time::Time)
+    # jacobian = Matrix{Float64}(0*I,size(jacobian)) #Jacobian coordinate: (reactant, product)
+    if typeof(jacobian)==SparseMatrixCSC{Float64, Int64}
+        mul!(jacobian,jacobian,0)
+    end
+
+    fill_jacobian_probdecay!(jacobian, reaction_data, net_idx)
+    fill_jacobian_neutroncapture!(jacobian, abundance, reaction_data, trajectory, net_idx, time)
+
     if typeof(jacobian)==Matrix{Float64}
         jacobian = sparse(jacobian)
     end
     # display(jacobian)
     mul!(jacobian,jacobian,-1)
     # display(jacobian)
-    jacobian[diagind(jacobian)] .+= 1/timestep
+    jacobian[diagind(jacobian)] .+= 1/time.step
     # jacobian .+= Matrix((1.0/timestep)I, size(jacobian))
     # @printf "%.5f\n" jacobian[1,1]
     # display(jacobian)
@@ -200,9 +297,9 @@ function fill_jacobian!(jacobian::Union{Matrix{Float64},SparseMatrixCSC{Float64,
     return jacobian
 end
 
-function initialize_and_fill_sparse_jacobian(networksize::Int64, abundance::Vector{Float64}, reaction_data::ReactionData, net_idx::NetworkIndex, timestep::Float64)
+function initialize_and_fill_sparse_jacobian(networksize::Int64, abundance::Vector{Float64}, reaction_data::ReactionData, trajectory::Trajectory, net_idx::NetworkIndex, time::Time)
     jacobian::Matrix{Float64} = initialize_jacobian(networksize)
-    fill_jacobian!(jacobian, abundance, reaction_data, net_idx, timestep)
+    fill_jacobian!(jacobian, abundance, reaction_data, trajectory, net_idx, time)
 end
 
 function newton_raphson_step(yproposed::Vector{Float64},jacobian::Matrix{Float64},jacobian_inv::Matrix{Float64},ydot::Vector{Float64})
@@ -216,11 +313,7 @@ function check_mass_fraction_unity(yproposed::Vector{Float64},mass_vector::Vecto
     # mass_fraction_sum = dot(yproposed,mass_vector)
     # display(mass_fraction_sum)
     # println(abs(1-dot(yproposed,mass_vector)))
-    if abs(1-dot(yproposed,mass_vector))<1e-10
-        return true
-    else
-        return false
-    end
+    return abs(1 - dot(yproposed, mass_vector)) < 1e-10
 end
 
 function lu_dot!(F::UmfpackLU, S::SparseMatrixCSC{<:UMFVTypes,<:UMFITypes}; check::Bool=true)
@@ -242,31 +335,36 @@ function lu_dot!(F::UmfpackLU, S::SparseMatrixCSC{<:UMFVTypes,<:UMFITypes}; chec
 end
 
 
-function newton_raphson_iteration!(abundance::Vector{Float64}, yproposed::Vector{Float64}, jacobian::SparseMatrixCSC{Float64, Int64}, F::UmfpackLU, ydot::Vector{Float64}, ydelta::Vector{Float64}, timestep::Float64, current_time::Float64, reaction_data::ReactionData, net_idx::NetworkIndex)
+function newton_raphson_iteration!(abundance::Vector{Float64}, yproposed::Vector{Float64}, jacobian::SparseMatrixCSC{Float64, Int64}, F::UmfpackLU, ydot::Vector{Float64}, ydelta::Vector{Float64}, time::Time, reaction_data::ReactionData, net_idx::NetworkIndex, trajectory::Trajectory)
     yproposed .= abundance
     # println("ok so far")
-    lu_dot!(F,jacobian); 
-    ldiv!(ydelta,F,(ydot.-(yproposed.-abundance)./timestep))
+    # lu_dot!(F,jacobian); 
+    # ldiv!(ydelta,F,(ydot.-(yproposed.-abundance)./time.step))
     # display(ydelta)
     # @printf "%e\n" timestep
     # yproposed[:] .+= ydelta
-    display(jacobian[1,1])
+    # display(jacobian[1,1])
     # display(ydelta)
     # ydelta .= jacobian \ ydot
+    ydelta .= jacobian \ ((ydot .- (yproposed .- abundance) ./ time.step))
     yproposed .+= ydelta
     if check_mass_fraction_unity(yproposed, net_idx.mass_vector)
-        display(true)
+        # display(true)
         # ydelta .= yproposed .- abundance
     else 
         while !check_mass_fraction_unity(yproposed, net_idx.mass_vector) # TODO: Convert to a do-while style loop to avoid unnecessary computations
-            fill_jacobian!(jacobian, yproposed, reaction_data, net_idx, timestep)
-            # println(current_time)
-            update_ydot!(ydot, yproposed, reaction_data, net_idx)
-            error("not converged")
+            @printf "not converged; 1 - mass fraction: %e\n" abs(1-dot(yproposed, net_idx.mass_vector))
+            fill_jacobian!(jacobian, yproposed, reaction_data, trajectory, net_idx, time)
+            update_ydot!(ydot, yproposed, reaction_data, net_idx, trajectory, time)
+
+            ydelta .= jacobian \ ((ydot .- (yproposed .- abundance) ./ time.step))
+            yproposed .+= ydelta
+            # error("not converged")
+            # break
         end
     end
     abundance .= yproposed
-    current_time += timestep
+    time.current += time.step
     # elseif converged == false
     #     while converged == false
     #         yproposed = jacobian \ (ydot - )
@@ -276,15 +374,14 @@ function newton_raphson_iteration!(abundance::Vector{Float64}, yproposed::Vector
     # jacobian_inv::Matrix{Float64} = inv(jacobian)
     # yproposed = yproposed + jacobian_inv * ydot
     # yproposed::Vector{Float64} = jacobian \ ydot + yproposed
-    return current_time
 end
 
-function update_timestep_size(abundance::Vector{Float64}, ydelta::Vector{Float64}, timestep::Float64)
+function update_timestep_size!(abundance::Vector{Float64}, ydelta::Vector{Float64}, time::Time)
     dely_delt::Vector{Float64} = abs.(ydelta[abundance.>1e-9]./abundance[abundance.>1e-9])
     if maximum(dely_delt)==0
-        return 2*timestep
+        time.step *= 2
     else
-        return min(2*timestep, 0.25*timestep/maximum(dely_delt))
+        time.step = min(2*time.step, 0.25*time.step/maximum(dely_delt))
     end
     # dely_delt[isnan.(dely_delt)] .= Inf
     # display(ydelta[abundance.>1e-25])
@@ -321,22 +418,22 @@ end
 #     return current_time += timestep
 # end
 
-function SolveNetwork!(abundance::Vector{Float64}, jacobian::SparseMatrixCSC{Float64, Int64}, reaction_data::ReactionData, ydot::Vector{Float64}, timestep::Float64, current_time::Float64,time_limit::Float64, net_idx::NetworkIndex)
+function SolveNetwork!(abundance::Vector{Float64}, jacobian::SparseMatrixCSC{Float64, Int64}, reaction_data::ReactionData, ydot::Vector{Float64}, time::Time, net_idx::NetworkIndex, trajectory::Trajectory)
     ydelta = Vector{Float64}(undef,size(abundance)[1])
     yproposed = Vector{Float64}(undef,size(abundance)[1])
     F = lu(jacobian)
     print_time_step::Float64 = 10.0
     # ps = MKLPardisoSolver()
-    while current_time < time_limit
-        current_time = newton_raphson_iteration!(abundance, yproposed, jacobian, F, ydot, ydelta, timestep, current_time, reaction_data, net_idx)
+    while time.current < time.stop
+        newton_raphson_iteration!(abundance, yproposed, jacobian, F, ydot, ydelta, time, reaction_data, net_idx, trajectory)
         # display(current_time)
         # display(ydot)
-        timestep = update_timestep_size(abundance, ydelta, timestep)
-        fill_jacobian!(jacobian, abundance, reaction_data, net_idx, timestep)
+        update_timestep_size!(abundance, ydelta, time)
+        fill_jacobian!(jacobian, abundance, reaction_data, trajectory, net_idx, time)
         # println(current_time)
-        update_ydot!(ydot, abundance, reaction_data, net_idx)
+        update_ydot!(ydot, abundance, reaction_data, net_idx, trajectory, time)
         # display(ydot)
-        @printf "[%e, %e],\n" current_time abundance[zn_to_index(0, 1, net_idx)]
+        @printf "[%e, %e],\n" time.current abundance[zn_to_index(0, 1, net_idx)]
         # if current_time > print_time_step
             # println(ydot)
             # @printf "[%f, %e],\n" current_time abundance[zn_to_index_dict[[0,1]]]

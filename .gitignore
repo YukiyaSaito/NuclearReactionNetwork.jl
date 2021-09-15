@@ -1,5 +1,21 @@
-*.jl.*.cov
+### Julia ###
 *.jl.cov
+*.jl.*.cov
 *.jl.mem
-/Manifest.toml
+*.jl.*.mem
+statprof/
+Manifest.toml
+
+### VisualStudioCode ###
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+.history/
+.history
+.ionide
+
+### macOS ###
 .DS_Store

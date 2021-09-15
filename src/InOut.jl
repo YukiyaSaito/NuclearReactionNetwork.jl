@@ -6,7 +6,7 @@ using ..Network
 export Result
 export dump_result
 
-# TODO: Should this be a matrix rather than a series of vectors of the same size?
+# TODO: Should this be a matrix rather than a series of vectors of the same size (we would lose type inhomogeneity)?
 struct Result
     proton_nums::Vector{Int64}
     neutron_nums::Vector{Int64}
@@ -34,6 +34,7 @@ end
 
 function dump_result(result::Result, path::String)
     open(path, "w") do out_file
+        # TODO: This should really write [Int64 Int64 Float64], but right now it gets promoted to [Float64 Float64 Float64]
         writedlm(out_file, [result.proton_nums result.neutron_nums.+result.proton_nums result.abundance])
     end
 end

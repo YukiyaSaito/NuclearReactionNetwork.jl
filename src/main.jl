@@ -26,7 +26,8 @@ function read_test(path::String)
     reaction_data::ReactionData = initialize_reactions()
     read_probdecay!("/Users/pvirally/Dropbox/Waterloo/Co-op/TRIUMF/prism1.5.0/input/nuclear/Nubase/betam_nubase2016_moller.dat", reaction_data)
     read_ncap!("/Users/pvirally/Dropbox/Waterloo/Co-op/TRIUMF/Data/Reaclib_ng.dat", reaction_data)
-    trajectory = read_trajectory("/Users/pvirally/Dropbox/Waterloo/Co-op/TRIUMF/prism1.5.0/input/examples/conditions/rprocess-dynamical-merger_trajectory")
+    # trajectory = read_trajectory("/Users/pvirally/Dropbox/Waterloo/Co-op/TRIUMF/prism1.5.0/input/examples/conditions/rprocess-dynamical-merger_trajectory")
+    trajectory = read_trajectory("/Users/pvirally/Dropbox/Waterloo/Co-op/TRIUMF/prism1.5.0/input/examples/conditions/rprocess-wind_trajectory")
     # display(reaction_data.neutroncapture[[[0,1],[55,110]]])
     extent = read_boundary(path)
     # println(extent)
@@ -38,18 +39,25 @@ function read_test(path::String)
     # println(zn_to_index_dict)
     abundance = initialize_abundance(networksize)
     abundance = read_initial_abundance("/Users/pvirally/Dropbox/Waterloo/Co-op/TRIUMF/prism1.5.0/input/examples/conditions/rprocess-dynamical-merger_initx", abundance, net_idx)
-    display(check_mass_fraction_unity(abundance, net_idx.mass_vector))
-    display(abundance)
+    # display(check_mass_fraction_unity(abundance, net_idx.mass_vector))
+    # display(abundance)
     ydot = initialize_ydot(networksize)
     fill_probdecay_ydot!(ydot, abundance, reaction_data, net_idx)
     # display(ydot)
-    timestep, current_time = initialize_timestep()
-    jacobian = initialize_and_fill_sparse_jacobian(networksize, abundance, reaction_data, net_idx, timestep)
+    # time = Time()
+    time = Time(0.0, 1e-15, 10.0)
+    jacobian = initialize_and_fill_sparse_jacobian(networksize, abundance, reaction_data, trajectory, net_idx, time)
     # display(jacobian)
-    time_limit::Float64 = 20.0
     # display(abundance[zn_to_index_dict[[54,93]]])
     # display(reaction_data.probdecay[[[0,1]]].rate)
-    SolveNetwork!(abundance, jacobian, reaction_data, ydot, timestep, current_time, time_limit, net_idx)
+    try
+        println("Solving network")
+        SolveNetwork!(abundance, jacobian, reaction_data, ydot, time, net_idx, trajectory)
+    finally
+        res = Result(abundance, net_idx);
+        dump_result(res, "/Users/pvirally/Dropbox/Waterloo/Co-op/TRIUMF/output/Y.txt")
+        println("Wrote results to disk")
+    end 
     # Profile.print()
     # ydelta = Vector{Float64}(undef,size(abundance)[1])
     # yproposed = Vector{Float64}(undef,size(abundance)[1])
@@ -59,11 +67,8 @@ function read_test(path::String)
     #     # @printf "%e\n" current_time
     # end
 
-    res = Result(abundance, net_idx);
-    dump_result(res, "/Users/pvirally/Dropbox/Waterloo/Co-op/TRIUMF/output/Y.txt")
-    
     # display(check_mass_fraction_unity(abundance,mass_vector))
-    display(abundance)
+    # display(abundaneare)
     # display(yproposed)
     # display(yproposed - abundance)
     # display(ydelta)
@@ -71,6 +76,6 @@ function read_test(path::String)
     # println(timestep)
     # println(typeof(jacobian))
     # println(typeof(reaction_data))
-    return networksize, timestep
+    return networksize, time.step
     # println(reaction_data.probdecay[[[57,109]]])
 end
