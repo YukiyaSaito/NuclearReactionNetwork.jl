@@ -120,10 +120,44 @@ function fill_neutroncapture_ydot!(ydot::Vector{Float64}, abundance::Vector{Floa
     end
 end
 
+function fill_alphadecay_ydot!(ydot::Vector{Float64}, abundance::Vector{Float64}, reaction_data::ReactionData, net_idx::NetworkIndex)
+    for decay in reaction_data.alphadecay
+        rate = decay.rate
+        if iszero(rate)
+            continue
+        end
+
+        # Grab the abundace of the reactant
+        z_r, n_r = decay.reactant
+        if !zn_in_network(z_r, n_r, net_idx)
+            continue
+        end
+        reactant_idx = zn_to_index(z_r, n_r, net_idx)
+        abundance_factor = abundance[reactant_idx]
+        if iszero(abundance_factor)
+            continue
+        end
+
+        # Update ydot for the reactant
+        ydot[reactant_idx] += -1.0 * rate * abundance_factor
+
+        # Update ydot for the products
+        for product in decay.product
+            z_p, n_p = product
+            if !zn_in_network(z_p, n_p, net_idx)
+                continue
+            end
+            product_idx = zn_to_index(z_p, n_p, net_idx)
+            ydot[product_idx] += 1.0 * rate * abundance_factor
+        end
+    end
+end
+
 function update_ydot!(ydot::Vector{Float64}, abundance::Vector{Float64}, reaction_data::ReactionData, net_idx::NetworkIndex, trajectory::Trajectory, time::Time)
     initialize_ydot!(ydot)
     fill_probdecay_ydot!(ydot, abundance, reaction_data, net_idx)
     fill_neutroncapture_ydot!(ydot, abundance, reaction_data, net_idx, trajectory, time)
+    fill_alphadecay_ydot!(ydot, abundance, reaction_data, net_idx)
 end
 
 function fill_initial_abundance!(abundance_index::Matrix{Int64}, abundance_vector::Vector{Float64}, abundance::Vector{Float64}, net_idx::NetworkIndex)
@@ -250,6 +284,26 @@ function fill_jacobian_neutroncapture!(jacobian::Union{Matrix{Float64},SparseMat
     end
 end
 
+function fill_jacobian_alphadecay!(jacobian::Union{Matrix{Float64},SparseMatrixCSC{Float64, Int64}}, reaction_data::ReactionData, net_idx::NetworkIndex)
+    for decay in reaction_data.alphadecay
+        z_r, n_r = decay.reactant
+        if !zn_in_network(z_r, n_r, net_idx)
+            continue
+        end
+        reactant_idx = zn_to_index(z_r, n_r, net_idx)
+        jacobian[reactant_idx, reactant_idx] += -1.0 * decay.rate
+
+        for product in decay.product
+            z_p, n_p = product
+            if !zn_in_network(z_p, n_p, net_idx)
+                continue
+            end
+            product_idx = zn_to_index(z_p, n_p, net_idx)
+            jacobian[product_idx, reactant_idx] += decay.rate
+        end
+    end
+end
+
 function fill_jacobian!(jacobian::Union{Matrix{Float64},SparseMatrixCSC{Float64, Int64}}, abundance::Vector{Float64}, reaction_data::ReactionData, trajectory::Trajectory, net_idx::NetworkIndex, time::Time)
     # jacobian = Matrix{Float64}(0*I,size(jacobian)) #Jacobian coordinate: (reactant, product)
     if typeof(jacobian)==SparseMatrixCSC{Float64, Int64}
@@ -258,6 +312,7 @@ function fill_jacobian!(jacobian::Union{Matrix{Float64},SparseMatrixCSC{Float64,
 
     fill_jacobian_probdecay!(jacobian, reaction_data, net_idx)
     fill_jacobian_neutroncapture!(jacobian, abundance, reaction_data, trajectory, net_idx, time)
+    fill_jacobian_alphadecay!(jacobian, reaction_data, net_idx)
 
     if typeof(jacobian)==Matrix{Float64}
         jacobian = sparse(jacobian)
@@ -357,6 +412,11 @@ function newton_raphson_iteration!(abundance::Vector{Float64}, yproposed::Vector
     end
     abundance .= yproposed
     time.current += time.step
+
+    # Cap the time
+    if time.current >= time.stop
+        time.current = time.stop
+    end
     # elseif converged == false
     #     while converged == false
     #         yproposed = jacobian \ (ydot - )
@@ -430,7 +490,7 @@ function SolveNetwork!(abundance::Vector{Float64}, jacobian::SparseMatrixCSC{Flo
 
         if dump_ytime
             result = Result(abundance, net_idx)
-            dump_iteration(result, trajectory, time, iteration, "/Users/pvirally/Dropbox/Waterloo/Co-op/TRIUMF/output/YTime.txt")
+            dump_iteration(result, trajectory, time, iteration, "/Users/pvirally/Dropbox/Waterloo/Co-op/TRIUMF/output/wind-beta+ncap+alpha-YTime.txt")
         end
 
         # if current_time > print_time_step
