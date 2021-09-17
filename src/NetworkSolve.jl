@@ -2,6 +2,7 @@ module NetworkSolve
 using ..Astro
 using ..Network
 using ..ReactionTypes
+using ..InOut
 using LinearAlgebra
 using DelimitedFiles
 using Printf
@@ -13,7 +14,6 @@ using SuiteSparse: decrement
 using SuiteSparse.UMFPACK: UmfpackLU, UMFVTypes, UMFITypes, umfpack_numeric!
 using Pardiso
 
-export Time
 export initialize_jacobian
 export initialize_abundance
 export read_initial_abundance
@@ -24,18 +24,6 @@ export newton_raphson_iteration!
 export initialize_and_fill_sparse_jacobian
 export check_mass_fraction_unity
 export SolveNetwork!
-
-mutable struct Time
-    current::Float64
-    step::Float64
-    stop::Float64
-    function Time(curr_time::Float64, time_step::Float64, stop_time::Float64)
-        return new(curr_time, time_step, stop_time)
-    end
-    function Time()
-        return new(0.0, 1e-15, 20.0)
-    end
-end
 
 function initialize_jacobian(networksize::Int64)
     # println(networksize)
@@ -95,6 +83,10 @@ function fill_neutroncapture_ydot!(ydot::Vector{Float64}, abundance::Vector{Floa
     curr_traj = get_current_trajectory(trajectory, time.current)
     for capture in values(reaction_data.neutroncapture)
         rate = capture.rate(curr_traj.temperature)
+        if iszero(rate)
+            println("Zero rate in fill_neutroncapture_ydot!")
+            continue
+        end
         # Grab the product of all the abundances
         abundance_factor = 1.0
         for reactant in capture.reactant
@@ -215,7 +207,7 @@ function fill_jacobian_neutroncapture!(jacobian::Union{Matrix{Float64},SparseMat
     for capture in values(reaction_data.neutroncapture)
         rate = capture.rate(curr_traj.temperature)
         if iszero(rate)
-            println("Zero rate")
+            println("Zero rate in fill_jacobian_neutroncapture!")
             continue
         end
 
@@ -418,12 +410,13 @@ end
 #     return current_time += timestep
 # end
 
-function SolveNetwork!(abundance::Vector{Float64}, jacobian::SparseMatrixCSC{Float64, Int64}, reaction_data::ReactionData, ydot::Vector{Float64}, time::Time, net_idx::NetworkIndex, trajectory::Trajectory)
+function SolveNetwork!(abundance::Vector{Float64}, jacobian::SparseMatrixCSC{Float64, Int64}, reaction_data::ReactionData, ydot::Vector{Float64}, time::Time, net_idx::NetworkIndex, trajectory::Trajectory, dump_ytime::Bool=false)
     ydelta = Vector{Float64}(undef,size(abundance)[1])
     yproposed = Vector{Float64}(undef,size(abundance)[1])
     F = lu(jacobian)
     print_time_step::Float64 = 10.0
     # ps = MKLPardisoSolver()
+    iteration = 1
     while time.current < time.stop
         newton_raphson_iteration!(abundance, yproposed, jacobian, F, ydot, ydelta, time, reaction_data, net_idx, trajectory)
         # display(current_time)
@@ -434,12 +427,19 @@ function SolveNetwork!(abundance::Vector{Float64}, jacobian::SparseMatrixCSC{Flo
         update_ydot!(ydot, abundance, reaction_data, net_idx, trajectory, time)
         # display(ydot)
         @printf "[%e, %e],\n" time.current abundance[zn_to_index(0, 1, net_idx)]
+
+        if dump_ytime
+            result = Result(abundance, net_idx)
+            dump_iteration(result, trajectory, time, iteration, "/Users/pvirally/Dropbox/Waterloo/Co-op/TRIUMF/output/YTime.txt")
+        end
+
         # if current_time > print_time_step
             # println(ydot)
             # @printf "[%f, %e],\n" current_time abundance[zn_to_index_dict[[0,1]]]
             # print_time_step += 10.0
         # end
         # @printf "%e\n" current_time
+        iteration += 1
     end
 end
 

@@ -4,8 +4,8 @@ module NuclearReactionNetwork
 include("./Astro.jl")
 include("./ReactionTypes.jl")
 include("./Network.jl")
-include("./NetworkSolve.jl")
 include("./InOut.jl")
+include("./NetworkSolve.jl")
 
 include("./main.jl")
 

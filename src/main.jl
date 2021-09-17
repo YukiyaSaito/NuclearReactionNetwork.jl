@@ -26,8 +26,8 @@ function read_test(path::String)
     reaction_data::ReactionData = initialize_reactions()
     read_probdecay!("/Users/pvirally/Dropbox/Waterloo/Co-op/TRIUMF/prism1.5.0/input/nuclear/Nubase/betam_nubase2016_moller.dat", reaction_data)
     read_ncap!("/Users/pvirally/Dropbox/Waterloo/Co-op/TRIUMF/Data/Reaclib_ng.dat", reaction_data)
-    # trajectory = read_trajectory("/Users/pvirally/Dropbox/Waterloo/Co-op/TRIUMF/prism1.5.0/input/examples/conditions/rprocess-dynamical-merger_trajectory")
-    trajectory = read_trajectory("/Users/pvirally/Dropbox/Waterloo/Co-op/TRIUMF/prism1.5.0/input/examples/conditions/rprocess-wind_trajectory")
+    trajectory = read_trajectory("/Users/pvirally/Dropbox/Waterloo/Co-op/TRIUMF/prism1.5.0/input/examples/conditions/rprocess-dynamical-merger_trajectory")
+    # trajectory = read_trajectory("/Users/pvirally/Dropbox/Waterloo/Co-op/TRIUMF/prism1.5.0/input/examples/conditions/rprocess-wind_trajectory")
     # display(reaction_data.neutroncapture[[[0,1],[55,110]]])
     extent = read_boundary(path)
     # println(extent)
@@ -50,9 +50,10 @@ function read_test(path::String)
     # display(jacobian)
     # display(abundance[zn_to_index_dict[[54,93]]])
     # display(reaction_data.probdecay[[[0,1]]].rate)
+    dump_each_iteration = false
     try
         println("Solving network")
-        SolveNetwork!(abundance, jacobian, reaction_data, ydot, time, net_idx, trajectory)
+        SolveNetwork!(abundance, jacobian, reaction_data, ydot, time, net_idx, trajectory, dump_each_iteration)
     finally
         res = Result(abundance, net_idx);
         dump_result(res, "/Users/pvirally/Dropbox/Waterloo/Co-op/TRIUMF/output/Y.txt")

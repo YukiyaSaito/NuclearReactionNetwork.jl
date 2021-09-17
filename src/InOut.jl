@@ -2,9 +2,12 @@ module InOut
 using DelimitedFiles
 using ..ReactionTypes
 using ..Network
+using ..Astro
+using ..Network
 
 export Result
 export dump_result
+export dump_iteration
 
 # TODO: Should this be a matrix rather than a series of vectors of the same size (we would lose type inhomogeneity)?
 struct Result
@@ -36,6 +39,20 @@ function dump_result(result::Result, path::String)
     open(path, "w") do out_file
         # TODO: This should really write [Int64 Int64 Float64], but right now it gets promoted to [Float64 Float64 Float64]
         writedlm(out_file, [result.proton_nums result.neutron_nums.+result.proton_nums result.abundance])
+    end
+end
+
+function dump_iteration(result::Result, trajectory::Trajectory, time::Time, iteration::Int64, path::String)
+    curr_traj = get_current_trajectory(trajectory, time.current)
+    mode = iteration == 1 ? "w" : "a"
+    open(path, mode) do out_file
+        write(out_file, "$(iteration)\t$(time.current)\t$(curr_traj.temperature)\t$(curr_traj.density)\n")
+        last_idx = findall(x->!iszero(x), result.abundance)[end]
+        Zs = result.proton_nums[1:last_idx]
+        As = result.proton_nums[1:last_idx] .+ result.neutron_nums[1:last_idx]
+        ys = result.abundance[1:last_idx]
+        writedlm(out_file, [Zs As ys])
+        write(out_file, "\n")
     end
 end
 
