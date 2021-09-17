@@ -8,6 +8,20 @@ export read_boundary
 export get_networksize
 export zn_to_index
 export zn_in_network
+export Time
+
+mutable struct Time
+    current::Float64
+    step::Float64
+    stop::Float64
+    function Time(curr_time::Float64, time_step::Float64, stop_time::Float64)
+        return new(curr_time, time_step, stop_time)
+    end
+    function Time()
+        return new(0.0, 1e-15, 20.0)
+    end
+end
+
 
 struct NetworkBoundary{T<:Matrix{Int64}}
     matrix::T

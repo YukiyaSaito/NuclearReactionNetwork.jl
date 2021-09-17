@@ -1,4 +1,8 @@
 module ReactionTypes
+
+using Interpolations
+using ..Astro
+
 export ProbDecay
 export ReactionData
 export initialize_reactions
@@ -23,10 +27,9 @@ end
 mutable struct NeutronCapture <: AbstractReaction #Temperature Dependent Reactions
     reactant::Vector{Vector{Int64}} #[[Z_0, N_0], [Z_1, N_1], ... [Z_n, N_n]]
     product::Vector{Vector{Int64}}
-    temperature::Vector{Float64}
-    rate::Vector{Float64}
-    pfunc::Vector{Float64}
-    current_rate::Float64  
+    rate::Interpolations.Extrapolation
+    pfunc::Interpolations.Extrapolation
+    current_rate::Float64 
 end
 # ProbDecay(reactant::Vector{Vector{Int64}}, 
 #             product::Vector{Vector{Int64}}, 
@@ -121,7 +124,9 @@ function read_ncap!(path::String, reaction_data::ReactionData)
                 for j in 1:length(product_z_temp)
                     product_temp[j] = [product_z_temp[j],product_n_temp[j]]
                 end
-                reaction_data.neutroncapture[copy(reactant_temp)] = NeutronCapture(copy(reactant_temp),copy(product_temp),copy(temperature),copy(rate_temp),copy(pfunc_temp),copy(current_rate))
+                rate_lerp = LinearInterpolation(copy(temperature), copy(rate_temp), extrapolation_bc=Flat())
+                pfunc_lerp = LinearInterpolation(copy(temperature), copy(pfunc_temp), extrapolation_bc=Flat())
+                reaction_data.neutroncapture[copy(reactant_temp)] = NeutronCapture(copy(reactant_temp), copy(product_temp), rate_lerp, pfunc_lerp, copy(current_rate))
     # 			#     # println(reactant_n)
     #             #     # println(product_z)
     #             #     # println(product_n)
