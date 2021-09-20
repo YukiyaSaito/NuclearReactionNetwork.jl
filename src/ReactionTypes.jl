@@ -8,6 +8,7 @@ export ReactionData
 export initialize_reactions
 export read_probdecay!
 export read_ncap!
+export read_alphadecay!
 
 abstract type AbstractReaction end
 
@@ -31,6 +32,14 @@ mutable struct NeutronCapture <: AbstractReaction #Temperature Dependent Reactio
     pfunc::Interpolations.Extrapolation
     current_rate::Float64 
 end
+
+# TODO: Make every decay struct have the same structures (i.e. tuples, or vectors, or something els)
+mutable struct AlphaDecay <: AbstractReaction
+    reactant::Tuple{Int64, Int64} # (Z, N)
+    product::Vector{Tuple{Int64, Int64}} # [(Z_0, N_0), (Z_1, N_1)]
+    rate::Float64
+end
+
 # ProbDecay(reactant::Vector{Vector{Int64}}, 
 #             product::Vector{Vector{Int64}}, 
 #             rate::Float64, 
@@ -42,15 +51,18 @@ end
 # end
 
 
+# TODO: Replace all dicts to simple vectors
 mutable struct ReactionData
     probdecay::Dict{Vector{Vector{Int64}},ProbDecay}
     neutroncapture::Dict{Vector{Vector{Int64}},NeutronCapture}
+    alphadecay::Vector{AlphaDecay}
 end
 
 function initialize_reactions()
     probdecay_dict = Dict{Vector{Vector{Int64}},ProbDecay}()
     ncap_dict = Dict{Vector{Vector{Int64}},NeutronCapture}()
-    return ReactionData(probdecay_dict,ncap_dict)
+    alphadecay = Vector{AlphaDecay}()
+    return ReactionData(probdecay_dict, ncap_dict, alphadecay)
 end
 
 
@@ -134,6 +146,28 @@ function read_ncap!(path::String, reaction_data::ReactionData)
     #             #     # println(average_number)
                 # println(Set(reactant_temp))
             end
+        end
+    end
+    return reaction_data
+end
+
+function read_alphadecay!(path::String, reaction_data::ReactionData)
+    #Read Fortran formatted input file for temperature dependent reaction rate. 
+    #reading line by line could be slow. Come back after implementing other parts.
+    open(path) do file
+        lines = readlines(file)
+        num_entries::Int64 = parse(Int, lines[1])
+        reaction_data.alphadecay = Vector{AlphaDecay}(undef, num_entries)
+        for i in 1:num_entries
+            z_r = parse(Int64, lines[5*(i-1) + 2])
+            n_r = parse(Int64, lines[5*(i-1) + 3])
+            z_p = [parse(Int64, s) for s in split(lines[5*(i-1) + 4])]
+            n_p = [parse(Int64, s) for s in split(lines[5*(i-1) + 5])]
+            rate = parse(Float64, lines[5*(i-1) + 6])
+
+            reactant = (z_r, n_r)
+            product = [(z_p[1], n_p[1]), (z_p[2], n_p[2])]
+            reaction_data.alphadecay[i] = AlphaDecay(reactant, product, rate)
         end
     end
     return reaction_data
