@@ -153,11 +153,97 @@ function fill_alphadecay_ydot!(ydot::Vector{Float64}, abundance::Vector{Float64}
     end
 end
 
+function fill_photodissociation_ydot!(ydot::Vector{Float64}, abundance::Vector{Float64}, reaction_data::ReactionData, net_idx::NetworkIndex, trajectory::Trajectory, time::Time)
+    curr_traj = get_current_trajectory(trajectory, time.current)
+    for reaction in values(reaction_data.neutroncapture)
+        q = reaction.q
+        if ismissing(reaction.q)
+            # println("Missing reverse reaction for $(reaction.product[1])")
+            continue
+        end
+
+        forward_rate = reaction.rate(curr_traj.temperature)
+        if iszero(forward_rate)
+            continue
+        end
+
+        # Lookup partition function for the product
+        key = [[0, 1], reaction.product[1]] # [[0, 1], [Z+1,N+1]]
+        if !haskey(reaction_data.neutroncapture, key) # Maybe the key should be [[Z+1, N+1], [0,1 ]]?
+            key = reverse(key)
+        end
+        if !haskey(reaction_data.neutroncapture, key)
+            pfunc_r = 1.0
+        else
+            pfunc_r = reaction_data.neutroncapture[key].pfunc(curr_traj.temperature)
+        end
+        pfunc_n = 2.0
+        pfunc_p = reaction.pfunc(curr_traj.temperature)
+
+        pfunc = pfunc_n * pfunc_p / pfunc_r # FIXME: What about division by zero?
+        if iszero(pfunc)
+            continue
+        end
+
+        # Grab the abundace of the reactant
+        z_r, n_r = reaction.product[1]
+        if !zn_in_network(z_r, n_r, net_idx)
+            continue
+        end
+        A_r = z_r + n_r
+        reactant_idx = zn_to_index(z_r, n_r, net_idx)
+        abundance_factor = abundance[reactant_idx]
+        if iszero(abundance_factor)
+            continue
+        end
+
+        # Compute the rate of the reaction
+        A_p = 0.0
+        for product in reaction.reactant
+            z_p, n_p = product
+            A_p += z_p + n_p
+        end
+        A_n = 1
+        if q < 0
+            reverse_rate = 1e16
+        else
+            reverse_rate = forward_rate * 9.8678e9 * pfunc * (A_n*A_p/A_r)^(3/2) * curr_traj.temperature^(3/2) * exp(-11.605 * q / curr_traj.temperature)
+        end
+
+        # Update ydot for the reactant
+        ydot[reactant_idx] += -1.0 * reverse_rate * abundance_factor
+
+        # if (z_r == 0) && (n_r == 1)
+        #     @printf "Neutron   -- pfunc: %e, %e, Forward: %e, Reverse %e, For/Rev %e, Time: %e\n" pfunc forward_rate reverse_rate forward_rate/reverse_rate time.current
+        # end
+        # if (z_r == 1) && (n_r == 0)
+        #     @printf "Proton    -- pfunc: %e, Forward: %e, Reverse %e, For/Rev %e, Time: %e\n" pfunc forward_rate reverse_rate forward_rate/reverse_rate time.current
+        # end
+        # if (z_r == 1) && (n_r == 1)
+        #     @printf "Hydrogen  -- pfunc: %e, Forward: %e, Reverse %e, For/Rev %e, Time: %e\n" pfunc forward_rate reverse_rate forward_rate/reverse_rate time.current
+        # end
+        # if (z_r == 1) && (n_r == 2)
+        #     @printf "Deuterium -- pfunc: %e, Forward: %e, Reverse %e, For/Rev %e, Time: %e\n" pfunc forward_rate reverse_rate forward_rate/reverse_rate time.current
+        # end
+
+        # Update ydot for the products
+        for product in reaction.reactant
+            z_p, n_p = product
+            if !zn_in_network(z_p, n_p, net_idx)
+                continue
+            end
+            product_idx = zn_to_index(z_p, n_p, net_idx)
+            ydot[product_idx] += 1.0 * reverse_rate * abundance_factor
+        end
+    end
+end
+
 function update_ydot!(ydot::Vector{Float64}, abundance::Vector{Float64}, reaction_data::ReactionData, net_idx::NetworkIndex, trajectory::Trajectory, time::Time)
     initialize_ydot!(ydot)
     fill_probdecay_ydot!(ydot, abundance, reaction_data, net_idx)
-    fill_neutroncapture_ydot!(ydot, abundance, reaction_data, net_idx, trajectory, time)
-    fill_alphadecay_ydot!(ydot, abundance, reaction_data, net_idx)
+    # fill_neutroncapture_ydot!(ydot, abundance, reaction_data, net_idx, trajectory, time)
+    # fill_alphadecay_ydot!(ydot, abundance, reaction_data, net_idx)
+    # fill_photodissociation_ydot!(ydot, abundance, reaction_data, net_idx, trajectory, time)
 end
 
 function fill_initial_abundance!(abundance_index::Matrix{Int64}, abundance_vector::Vector{Float64}, abundance::Vector{Float64}, net_idx::NetworkIndex)
@@ -269,7 +355,7 @@ function fill_jacobian_neutroncapture!(jacobian::Union{Matrix{Float64},SparseMat
         end
         product_idx = zn_to_index(z_p, n_p, net_idx)
 
-        # Doule counting factor TODO: Is this always 1.0?
+        # Double counting factor TODO: Is this always 1.0?
         dc_factor = reactant_idx == product_idx ? 0.5 : 1.0
 
         # Reactants
@@ -304,6 +390,90 @@ function fill_jacobian_alphadecay!(jacobian::Union{Matrix{Float64},SparseMatrixC
     end
 end
 
+function fill_jacobian_photodissociation!(jacobian::Union{Matrix{Float64},SparseMatrixCSC{Float64, Int64}}, abundance::Vector{Float64}, reaction_data::ReactionData, trajectory::Trajectory, net_idx::NetworkIndex, time::Time)
+    curr_traj = get_current_trajectory(trajectory, time.current)
+    if iszero(curr_traj.density)
+        println("Zero density")
+        return
+    end
+
+    # TODO: Convert this to a loop instead of 6 hard coded changes to the jacobian?
+    for reaction in values(reaction_data.neutroncapture)
+        forward_rate = reaction.rate(curr_traj.temperature)
+        if iszero(forward_rate)
+            continue
+        end
+
+        pfunc = reaction.pfunc(curr_traj.temperature) # TODO: This is only g_p, we still need g_n and g_r?
+        if iszero(pfunc)
+            continue
+        end
+
+        q = reaction.q
+        if ismissing(q)
+            continue
+        end
+
+        # Reactant index
+        reactant = reaction.product[1]
+        z_r, n_r = reactant
+        if !zn_in_network(z_r, n_r, net_idx)
+            continue
+        end
+        reactant_idx = zn_to_index(z_r, n_r, net_idx)
+
+        # Neutron (product) index
+        if !zn_in_network(0, 1, net_idx) # TODO: Are neutrons always in the network making this check redundant?
+            continue
+        end
+        neutron_idx = zn_to_index(0, 1, net_idx)
+
+        # Product index 
+        product = reaction.reactant[2]
+        z_p, n_p = product
+        if !zn_in_network(z_p, n_p, net_idx)
+            continue
+        end
+        product_idx = zn_to_index(z_p, n_p, net_idx)
+
+        # Lookup partition function for the reactant (product of the forward reaction)
+        key = [[0, 1], reaction.product[1]] # [[0, 1], [Z+1,N+1]]
+        if !haskey(reaction_data.neutroncapture, key) # Maybe the key should be [[Z+1, N+1], [0,1 ]]?
+            key = reverse(key)
+        end
+        if !haskey(reaction_data.neutroncapture, key)
+            pfunc_r = 1.0
+        else
+            pfunc_r = reaction_data.neutroncapture[key].pfunc(curr_traj.temperature)
+        end
+        pfunc_n = 2.0
+        pfunc_p = reaction.pfunc(curr_traj.temperature)
+
+        pfunc = pfunc_n * pfunc_p / pfunc_r # FIXME: What about division by zero?
+        if iszero(pfunc)
+            continue
+        end
+
+        A_n = 1
+        A_p = 0 + 1 + z_p + n_p
+        A_r = z_r + n_r
+
+        # Reverse rate
+        if q < 0
+            reverse_rate = 1e16
+        else
+            reverse_rate = forward_rate * 9.8678e9 * pfunc * (A_n*A_p/A_r)^(3/2) * curr_traj.temperature^(3/2) * exp(-11.605 * q / curr_traj.temperature)
+        end
+
+        # Reactant
+        jacobian[reactant_idx, reactant_idx] -= reverse_rate # J_RR
+
+        # Products
+        jacobian[product_idx, reactant_idx]  += reverse_rate # J_PR
+        jacobian[neutron_idx, reactant_idx]  += reverse_rate # J_nR
+    end
+end
+
 function fill_jacobian!(jacobian::Union{Matrix{Float64},SparseMatrixCSC{Float64, Int64}}, abundance::Vector{Float64}, reaction_data::ReactionData, trajectory::Trajectory, net_idx::NetworkIndex, time::Time)
     # jacobian = Matrix{Float64}(0*I,size(jacobian)) #Jacobian coordinate: (reactant, product)
     if typeof(jacobian)==SparseMatrixCSC{Float64, Int64}
@@ -311,8 +481,9 @@ function fill_jacobian!(jacobian::Union{Matrix{Float64},SparseMatrixCSC{Float64,
     end
 
     fill_jacobian_probdecay!(jacobian, reaction_data, net_idx)
-    fill_jacobian_neutroncapture!(jacobian, abundance, reaction_data, trajectory, net_idx, time)
-    fill_jacobian_alphadecay!(jacobian, reaction_data, net_idx)
+    # fill_jacobian_neutroncapture!(jacobian, abundance, reaction_data, trajectory, net_idx, time)
+    # fill_jacobian_alphadecay!(jacobian, reaction_data, net_idx)
+    # fill_jacobian_photodissociation!(jacobian, abundance, reaction_data, trajectory, net_idx, time)
 
     if typeof(jacobian)==Matrix{Float64}
         jacobian = sparse(jacobian)
@@ -360,7 +531,7 @@ function check_mass_fraction_unity(yproposed::Vector{Float64},mass_vector::Vecto
     # mass_fraction_sum = dot(yproposed,mass_vector)
     # display(mass_fraction_sum)
     # println(abs(1-dot(yproposed,mass_vector)))
-    return abs(1 - dot(yproposed, mass_vector)) < 1e-10
+    return abs(1 - dot(yproposed, mass_vector)) < 1e-8
 end
 
 function lu_dot!(F::UmfpackLU, S::SparseMatrixCSC{<:UMFVTypes,<:UMFITypes}; check::Bool=true)
@@ -399,6 +570,7 @@ function newton_raphson_iteration!(abundance::Vector{Float64}, yproposed::Vector
         # display(true)
         # ydelta .= yproposed .- abundance
     else 
+        # failed::Int64 = 0
         while !check_mass_fraction_unity(yproposed, net_idx.mass_vector) # TODO: Convert to a do-while style loop to avoid unnecessary computations
             @printf "not converged; 1 - mass fraction: %e\n" abs(1-dot(yproposed, net_idx.mass_vector))
             fill_jacobian!(jacobian, yproposed, reaction_data, trajectory, net_idx, time)
@@ -415,6 +587,7 @@ function newton_raphson_iteration!(abundance::Vector{Float64}, yproposed::Vector
 
     # Cap the time
     if time.current >= time.stop
+        # time.step = time.stop - (time.current - time.step) TODO: Add this?
         time.current = time.stop
     end
     # elseif converged == false
@@ -470,6 +643,10 @@ end
 #     return current_time += timestep
 # end
 
+function clip_abundance!(abundance::Vector{Float64}, max_val::Float64=0.0)
+    abundance[abundance .< max_val] .= 0.0
+end
+
 function SolveNetwork!(abundance::Vector{Float64}, jacobian::SparseMatrixCSC{Float64, Int64}, reaction_data::ReactionData, ydot::Vector{Float64}, time::Time, net_idx::NetworkIndex, trajectory::Trajectory, dump_ytime::Bool=false)
     ydelta = Vector{Float64}(undef,size(abundance)[1])
     yproposed = Vector{Float64}(undef,size(abundance)[1])
@@ -478,6 +655,7 @@ function SolveNetwork!(abundance::Vector{Float64}, jacobian::SparseMatrixCSC{Flo
     # ps = MKLPardisoSolver()
     iteration = 1
     while time.current < time.stop
+        clip_abundance!(abundance)
         newton_raphson_iteration!(abundance, yproposed, jacobian, F, ydot, ydelta, time, reaction_data, net_idx, trajectory)
         # display(current_time)
         # display(ydot)
@@ -490,7 +668,8 @@ function SolveNetwork!(abundance::Vector{Float64}, jacobian::SparseMatrixCSC{Flo
 
         if dump_ytime
             result = Result(abundance, net_idx)
-            dump_iteration(result, trajectory, time, iteration, "/Users/pvirally/Dropbox/Waterloo/Co-op/TRIUMF/output/wind-beta+ncap+alpha-YTime.txt")
+            # dump_iteration(result, trajectory, time, iteration, "/Users/pvirally/Dropbox/Waterloo/Co-op/TRIUMF/output/wind-beta+ncap+alpha+photo-YTime.txt")
+            dump_iteration(result, trajectory, time, iteration, "/Users/pvirally/Dropbox/Waterloo/Co-op/TRIUMF/output/wind-beta-YTime.txt")
         end
 
         # if current_time > print_time_step

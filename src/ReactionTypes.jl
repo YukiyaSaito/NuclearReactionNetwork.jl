@@ -9,6 +9,7 @@ export initialize_reactions
 export read_probdecay!
 export read_ncap!
 export read_alphadecay!
+export read_photodissociation!
 
 abstract type AbstractReaction end
 
@@ -31,6 +32,7 @@ mutable struct NeutronCapture <: AbstractReaction #Temperature Dependent Reactio
     rate::Interpolations.Extrapolation
     pfunc::Interpolations.Extrapolation
     current_rate::Float64 
+    q::Union{Missing, Float64}
 end
 
 # TODO: Make every decay struct have the same structures (i.e. tuples, or vectors, or something els)
@@ -138,7 +140,7 @@ function read_ncap!(path::String, reaction_data::ReactionData)
                 end
                 rate_lerp = LinearInterpolation(copy(temperature), copy(rate_temp), extrapolation_bc=Flat())
                 pfunc_lerp = LinearInterpolation(copy(temperature), copy(pfunc_temp), extrapolation_bc=Flat())
-                reaction_data.neutroncapture[copy(reactant_temp)] = NeutronCapture(copy(reactant_temp), copy(product_temp), rate_lerp, pfunc_lerp, copy(current_rate))
+                reaction_data.neutroncapture[copy(reactant_temp)] = NeutronCapture(copy(reactant_temp), copy(product_temp), rate_lerp, pfunc_lerp, copy(current_rate), missing)
     # 			#     # println(reactant_n)
     #             #     # println(product_z)
     #             #     # println(product_n)
@@ -170,6 +172,35 @@ function read_alphadecay!(path::String, reaction_data::ReactionData)
             reaction_data.alphadecay[i] = AlphaDecay(reactant, product, rate)
         end
     end
+    return reaction_data
+end
+
+function read_photodissociation!(reverse_reaction_file::String, reaction_data::ReactionData)
+    # Read the reverse reaction nfile
+    open(reverse_reaction_file) do file
+        lines = readlines(file)
+        num_entries::Int64 = parse(Int, lines[1])
+        for i in 1:num_entries
+            z_r = parse(Int64, lines[5*(i-1) + 2])
+            n_r = parse(Int64, lines[5*(i-1) + 3])
+            z_ps = [parse(Int64, s) for s in split(lines[5*(i-1) + 4])]
+            n_ps = [parse(Int64, s) for s in split(lines[5*(i-1) + 5])]
+            q = parse(Float64, lines[5*(i-1) + 6])
+
+            reactant = (z_r, n_r)
+            products = [[z_p, n_p] for (z_p, n_p) in zip(z_ps, n_ps)]
+            key = products
+            if !haskey(reaction_data.neutroncapture, key)
+                key = [products[2], products[1]]
+            end
+            if !haskey(reaction_data.neutroncapture, key)
+                # println("Reverse reaction ($(reactant[1]), $(reactant[2])) doesn't have forward reaction")
+                continue
+            end
+            reaction_data.neutroncapture[key].q = q
+        end
+    end
+
     return reaction_data
 end
 
