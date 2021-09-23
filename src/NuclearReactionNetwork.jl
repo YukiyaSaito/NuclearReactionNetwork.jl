@@ -2,8 +2,8 @@ module NuclearReactionNetwork
 
 # Write your package code here.
 include("./Astro.jl")
-include("./ReactionTypes.jl")
 include("./Network.jl")
+include("./ReactionTypes.jl")
 include("./InOut.jl")
 include("./NetworkSolve.jl")
 

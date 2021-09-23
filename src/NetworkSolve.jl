@@ -84,7 +84,7 @@ function fill_neutroncapture_ydot!(ydot::Vector{Float64}, abundance::Vector{Floa
     for capture in values(reaction_data.neutroncapture)
         rate = capture.rate(curr_traj.temperature)
         if iszero(rate)
-            println("Zero rate in fill_neutroncapture_ydot!")
+            # println("Zero rate in fill_neutroncapture_ydot!")
             continue
         end
         # Grab the product of all the abundances
@@ -241,9 +241,9 @@ end
 function update_ydot!(ydot::Vector{Float64}, abundance::Vector{Float64}, reaction_data::ReactionData, net_idx::NetworkIndex, trajectory::Trajectory, time::Time)
     initialize_ydot!(ydot)
     fill_probdecay_ydot!(ydot, abundance, reaction_data, net_idx)
-    # fill_neutroncapture_ydot!(ydot, abundance, reaction_data, net_idx, trajectory, time)
-    # fill_alphadecay_ydot!(ydot, abundance, reaction_data, net_idx)
-    # fill_photodissociation_ydot!(ydot, abundance, reaction_data, net_idx, trajectory, time)
+    fill_neutroncapture_ydot!(ydot, abundance, reaction_data, net_idx, trajectory, time)
+    fill_alphadecay_ydot!(ydot, abundance, reaction_data, net_idx)
+    fill_photodissociation_ydot!(ydot, abundance, reaction_data, net_idx, trajectory, time)
 end
 
 function fill_initial_abundance!(abundance_index::Matrix{Int64}, abundance_vector::Vector{Float64}, abundance::Vector{Float64}, net_idx::NetworkIndex)
@@ -319,7 +319,7 @@ end
 function fill_jacobian_neutroncapture!(jacobian::Union{Matrix{Float64},SparseMatrixCSC{Float64, Int64}}, abundance::Vector{Float64}, reaction_data::ReactionData, trajectory::Trajectory, net_idx::NetworkIndex, time::Time)
     curr_traj = get_current_trajectory(trajectory, time.current)
     if iszero(curr_traj.density)
-        println("Zero density")
+        # println("Zero density")
         return
     end
 
@@ -327,7 +327,7 @@ function fill_jacobian_neutroncapture!(jacobian::Union{Matrix{Float64},SparseMat
     for capture in values(reaction_data.neutroncapture)
         rate = capture.rate(curr_traj.temperature)
         if iszero(rate)
-            println("Zero rate in fill_jacobian_neutroncapture!")
+            # println("Zero rate in fill_jacobian_neutroncapture!")
             continue
         end
 
@@ -393,7 +393,7 @@ end
 function fill_jacobian_photodissociation!(jacobian::Union{Matrix{Float64},SparseMatrixCSC{Float64, Int64}}, abundance::Vector{Float64}, reaction_data::ReactionData, trajectory::Trajectory, net_idx::NetworkIndex, time::Time)
     curr_traj = get_current_trajectory(trajectory, time.current)
     if iszero(curr_traj.density)
-        println("Zero density")
+        # println("Zero density")
         return
     end
 
@@ -481,9 +481,9 @@ function fill_jacobian!(jacobian::Union{Matrix{Float64},SparseMatrixCSC{Float64,
     end
 
     fill_jacobian_probdecay!(jacobian, reaction_data, net_idx)
-    # fill_jacobian_neutroncapture!(jacobian, abundance, reaction_data, trajectory, net_idx, time)
-    # fill_jacobian_alphadecay!(jacobian, reaction_data, net_idx)
-    # fill_jacobian_photodissociation!(jacobian, abundance, reaction_data, trajectory, net_idx, time)
+    fill_jacobian_neutroncapture!(jacobian, abundance, reaction_data, trajectory, net_idx, time)
+    fill_jacobian_alphadecay!(jacobian, reaction_data, net_idx)
+    fill_jacobian_photodissociation!(jacobian, abundance, reaction_data, trajectory, net_idx, time)
 
     if typeof(jacobian)==Matrix{Float64}
         jacobian = sparse(jacobian)
@@ -526,12 +526,12 @@ function newton_raphson_step(yproposed::Vector{Float64},jacobian::Matrix{Float64
     return yproposed  
 end
 
-function check_mass_fraction_unity(yproposed::Vector{Float64},mass_vector::Vector{Float64})
+function check_mass_fraction_unity(yproposed::Vector{Float64}, mass_vector::Vector{Float64}, tolerance::Float64=1e-8)
     # mass_fraction_sum::Float64 = 0
     # mass_fraction_sum = dot(yproposed,mass_vector)
     # display(mass_fraction_sum)
     # println(abs(1-dot(yproposed,mass_vector)))
-    return abs(1 - dot(yproposed, mass_vector)) < 1e-8
+    return abs(1 - dot(yproposed, mass_vector)) < tolerance
 end
 
 function lu_dot!(F::UmfpackLU, S::SparseMatrixCSC{<:UMFVTypes,<:UMFITypes}; check::Bool=true)
@@ -564,20 +564,34 @@ function newton_raphson_iteration!(abundance::Vector{Float64}, yproposed::Vector
     # display(jacobian[1,1])
     # display(ydelta)
     # ydelta .= jacobian \ ydot
+    failed::Int64 = 0
     ydelta .= jacobian \ ((ydot .- (yproposed .- abundance) ./ time.step))
     yproposed .+= ydelta
     if check_mass_fraction_unity(yproposed, net_idx.mass_vector)
         # display(true)
         # ydelta .= yproposed .- abundance
     else 
-        # failed::Int64 = 0
+        num_tries::Int64 = 0
         while !check_mass_fraction_unity(yproposed, net_idx.mass_vector) # TODO: Convert to a do-while style loop to avoid unnecessary computations
-            @printf "not converged; 1 - mass fraction: %e\n" abs(1-dot(yproposed, net_idx.mass_vector))
+            # Record how many times we've failed for later
+            failed += 1
+
+            # Halve the time step after 10 failed attempts
+            num_tries += 1
+            if num_tries > 1
+                time.step /= 2
+                num_tries = 0
+                @printf "\t\tHalving time step\n"
+            end
+
+            # Update all the data
+            @printf "\tnot converged; 1 - mass fraction: %e\n" abs(1-dot(yproposed, net_idx.mass_vector))
             fill_jacobian!(jacobian, yproposed, reaction_data, trajectory, net_idx, time)
             update_ydot!(ydot, yproposed, reaction_data, net_idx, trajectory, time)
 
             ydelta .= jacobian \ ((ydot .- (yproposed .- abundance) ./ time.step))
             yproposed .+= ydelta
+
             # error("not converged")
             # break
         end
@@ -590,6 +604,7 @@ function newton_raphson_iteration!(abundance::Vector{Float64}, yproposed::Vector
         # time.step = time.stop - (time.current - time.step) TODO: Add this?
         time.current = time.stop
     end
+    return failed
     # elseif converged == false
     #     while converged == false
     #         yproposed = jacobian \ (ydot - )
@@ -654,9 +669,10 @@ function SolveNetwork!(abundance::Vector{Float64}, jacobian::SparseMatrixCSC{Flo
     print_time_step::Float64 = 10.0
     # ps = MKLPardisoSolver()
     iteration = 1
+    failed_iterations = 0
     while time.current < time.stop
         clip_abundance!(abundance)
-        newton_raphson_iteration!(abundance, yproposed, jacobian, F, ydot, ydelta, time, reaction_data, net_idx, trajectory)
+        failed_iterations += newton_raphson_iteration!(abundance, yproposed, jacobian, F, ydot, ydelta, time, reaction_data, net_idx, trajectory)
         # display(current_time)
         # display(ydot)
         update_timestep_size!(abundance, ydelta, time)
@@ -664,12 +680,11 @@ function SolveNetwork!(abundance::Vector{Float64}, jacobian::SparseMatrixCSC{Flo
         # println(current_time)
         update_ydot!(ydot, abundance, reaction_data, net_idx, trajectory, time)
         # display(ydot)
-        @printf "[%e, %e],\n" time.current abundance[zn_to_index(0, 1, net_idx)]
+        @printf "[%e, %e], Failed Iterations: %d, Time step #: %d, Avg. Iterations/Timestep %f\n" time.current abundance[zn_to_index(0, 1, net_idx)] failed_iterations iteration (failed_iterations + iteration)/iteration
 
         if dump_ytime
             result = Result(abundance, net_idx)
-            # dump_iteration(result, trajectory, time, iteration, "/Users/pvirally/Dropbox/Waterloo/Co-op/TRIUMF/output/wind-beta+ncap+alpha+photo-YTime.txt")
-            dump_iteration(result, trajectory, time, iteration, "/Users/pvirally/Dropbox/Waterloo/Co-op/TRIUMF/output/wind-beta-YTime.txt")
+            dump_iteration(result, trajectory, time, iteration, "/Users/pvirally/Dropbox/Waterloo/Co-op/TRIUMF/output/wind-beta+ncap+alpha+photo+moller-YTime.txt")
         end
 
         # if current_time > print_time_step

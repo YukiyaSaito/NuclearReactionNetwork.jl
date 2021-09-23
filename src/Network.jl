@@ -85,6 +85,10 @@ function zn_to_index(z::Int64, n::Int64, net_idx::NetworkIndex)
 end
 
 function zn_in_network(z::Int64, n::Int64, net_idx::NetworkIndex)
+    # TODO: Maybe only accept uints and not ints?
+    if z+1 > size(net_idx.networkboundary.matrix, 1) || z < 0
+        return false
+    end
     return n <= net_idx.networkboundary.matrix[z+1, 3] 
 end
 
