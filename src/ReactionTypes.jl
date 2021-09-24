@@ -2,6 +2,7 @@ module ReactionTypes
 
 using Interpolations
 using ..Astro
+using ..Network
 
 export ProbDecay
 export ReactionData
@@ -69,7 +70,7 @@ end
 
 
 
-function read_probdecay!(path::String, reaction_data::ReactionData) 
+function read_probdecay!(path::String, reaction_data::ReactionData, net_idx::NetworkIndex) 
 #Read Fortran formatted PRISM input file for probabilistic decay.
 #reading line by line could be slow. Come back after implementing other parts.
     open(path) do file
@@ -93,6 +94,20 @@ function read_probdecay!(path::String, reaction_data::ReactionData)
             for j in 1:length(product_z)
                 product[j] = [product_z[j],product_n[j]]
             end
+
+            # Check if any of the products or reactants are outside of the network
+            out_of_network = false
+            for (z, n) in [reactant; product]
+                if !zn_in_network(z, n, net_idx)
+                    out_of_network = true
+                    break
+                end
+            end
+            # If any of the species are outside of the network, skip this reaction
+            if out_of_network
+                continue
+            end
+
             reaction_data.probdecay[reactant] = ProbDecay(reactant,product,rate,average_number)
             # println(typeof(reactant_z[1]))
         #     # println(reactant_n)
@@ -106,7 +121,7 @@ function read_probdecay!(path::String, reaction_data::ReactionData)
     return reaction_data
 end
     
-function read_ncap!(path::String, reaction_data::ReactionData) 
+function read_ncap!(path::String, reaction_data::ReactionData, net_idx::NetworkIndex) 
     #Read Fortran formatted input file for temperature dependent reaction rate. 
     #reading line by line could be slow. Come back after implementing other parts.
     open(path) do file
@@ -138,6 +153,20 @@ function read_ncap!(path::String, reaction_data::ReactionData)
                 for j in 1:length(product_z_temp)
                     product_temp[j] = [product_z_temp[j],product_n_temp[j]]
                 end
+
+                # Check if any of the products or reactants are outside of the network
+                out_of_network = false
+                for (z, n) in [reactant_temp; product_temp]
+                    if !zn_in_network(z, n, net_idx)
+                        out_of_network = true
+                        break
+                    end
+                end
+                # If any of the species are outside of the network, skip this reaction
+                if out_of_network
+                    continue
+                end
+
                 rate_lerp = LinearInterpolation(copy(temperature), copy(rate_temp), extrapolation_bc=Flat())
                 pfunc_lerp = LinearInterpolation(copy(temperature), copy(pfunc_temp), extrapolation_bc=Flat())
                 reaction_data.neutroncapture[copy(reactant_temp)] = NeutronCapture(copy(reactant_temp), copy(product_temp), rate_lerp, pfunc_lerp, copy(current_rate), missing)
@@ -153,13 +182,12 @@ function read_ncap!(path::String, reaction_data::ReactionData)
     return reaction_data
 end
 
-function read_alphadecay!(path::String, reaction_data::ReactionData)
+function read_alphadecay!(path::String, reaction_data::ReactionData, net_idx::NetworkIndex)
     #Read Fortran formatted input file for temperature dependent reaction rate. 
     #reading line by line could be slow. Come back after implementing other parts.
     open(path) do file
         lines = readlines(file)
         num_entries::Int64 = parse(Int, lines[1])
-        reaction_data.alphadecay = Vector{AlphaDecay}(undef, num_entries)
         for i in 1:num_entries
             z_r = parse(Int64, lines[5*(i-1) + 2])
             n_r = parse(Int64, lines[5*(i-1) + 3])
@@ -169,13 +197,27 @@ function read_alphadecay!(path::String, reaction_data::ReactionData)
 
             reactant = (z_r, n_r)
             product = [(z_p[1], n_p[1]), (z_p[2], n_p[2])]
-            reaction_data.alphadecay[i] = AlphaDecay(reactant, product, rate)
+
+            # Check if any of the products or reactants are outside of the network
+            out_of_network = false
+            for (z, n) in [reactant; product]
+                if !zn_in_network(z, n, net_idx)
+                    out_of_network = true
+                    break
+                end
+            end
+            # If any of the species are outside of the network, skip this reaction
+            if out_of_network
+                continue
+            end
+
+            push!(reaction_data.alphadecay, AlphaDecay(reactant, product, rate))
         end
     end
     return reaction_data
 end
 
-function read_photodissociation!(reverse_reaction_file::String, reaction_data::ReactionData)
+function read_photodissociation!(reverse_reaction_file::String, reaction_data::ReactionData, net_idx::NetworkIndex)
     # Read the reverse reaction nfile
     open(reverse_reaction_file) do file
         lines = readlines(file)
@@ -189,6 +231,20 @@ function read_photodissociation!(reverse_reaction_file::String, reaction_data::R
 
             reactant = (z_r, n_r)
             products = [[z_p, n_p] for (z_p, n_p) in zip(z_ps, n_ps)]
+
+            # Check if any of the products or reactants are outside of the network
+            out_of_network = false
+            for (z, n) in [reactant; products]
+                if !zn_in_network(z, n, net_idx)
+                    out_of_network = true
+                    break
+                end
+            end
+            # If any of the species are outside of the network, skip this reaction
+            if out_of_network
+                continue
+            end
+
             key = products
             if !haskey(reaction_data.neutroncapture, key)
                 key = [products[2], products[1]]
