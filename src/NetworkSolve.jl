@@ -19,7 +19,7 @@ export check_mass_fraction_unity
 export SolveNetwork!
 
 function check_mass_fraction_unity(nd::NetworkData, tolerance::Float64=1e-8)
-    return abs(1 - dot(nd.yproposed, nd.mass_vector)) < tolerance
+    return abs(1 - dot(nd.yproposed, nd.net_idx.mass_vector)) < tolerance
 end
 
 function lu_dot!(F::UmfpackLU, S::SparseMatrixCSC{<:UMFVTypes,<:UMFITypes}; check::Bool=true)
