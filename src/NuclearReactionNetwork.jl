@@ -24,7 +24,6 @@ import .read_trajectory
 export initialize_reactions
 export read_boundary
 export ProbDecay
-export initialize_jacobian
 
 export main
 

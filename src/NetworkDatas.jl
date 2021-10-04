@@ -10,14 +10,8 @@ using DelimitedFiles
 export NetworkData
 export OutputInfo
 export IncludedReactions
-export initialize_jacobian
-export initialize_abundance
-export read_initial_abundance
 export fill_jacobian!
-export initialize_ydot
 export fill_probdecay_ydot!
-export newton_raphson_iteration!
-export initialize_and_fill_sparse_jacobian
 export update_ydot!
 
 struct OutputInfo
@@ -45,21 +39,6 @@ mutable struct NetworkData
     jacobian::Union{Matrix{Float64}, SparseMatrixCSC{Float64, Int64}}
     output_info::OutputInfo
     included_reactions::IncludedReactions
-end
-
-function initialize_jacobian(networksize::Int64)
-    jacobian::Matrix{Float64} = zeros(Float64, networksize, networksize)
-    return jacobian
-end
-
-function initialize_abundance(networksize::Int64)
-    abundance::Vector{Float64} = zeros(Float64,networksize)
-    return abundance
-end
-
-function initialize_ydot(networksize::Int64)
-    ydot::Vector{Float64} = zeros(Float64,networksize)
-    return ydot
 end
 
 function initialize_ydot!(nd::NetworkData)
@@ -262,13 +241,6 @@ function fill_initial_abundance!(abundance_index::Matrix{Int64}, abundance_vecto
     return abundance
 end
 
-function read_initial_abundance(path::String, abundance::Vector{Float64}, net_idx::NetworkIndex)
-    raw_abundance::Matrix{Float64} = readdlm(path)
-    abundance_index::Matrix{Int64} = round.(Int,raw_abundance[:,1:2])
-    abundance_vector::Vector{Float64} = raw_abundance[:,3]/sum(raw_abundance[:,3])
-    fill_initial_abundance!(abundance_index, abundance_vector, abundance, net_idx)
-end
-
 function fill_jacobian_probdecay!(nd::NetworkData, use_yproposed::Bool=false)
     abundance = nd.abundance
     if use_yproposed
@@ -455,11 +427,6 @@ function fill_jacobian!(nd::NetworkData; use_yproposed::Bool=false)
 
     mul!(nd.jacobian, nd.jacobian, -1)
     nd.jacobian[diagind(nd.jacobian)] .+= 1/nd.time.step
-end
-
-function initialize_and_fill_sparse_jacobian(networksize::Int64, nd::NetworkData)
-    nd.jacobian = initialize_jacobian(networksize)
-    fill_jacobian!(nd)
 end
 
 export other_thing

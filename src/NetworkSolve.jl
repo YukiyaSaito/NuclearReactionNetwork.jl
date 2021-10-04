@@ -53,16 +53,15 @@ function newton_raphson_iteration!(nd::NetworkData, Δy::Vector{Float64})
     # while num_failed < 1
         @printf "\tnot converged; 1 - mass fraction: %e\n" abs(1 - dot(nd.yproposed, nd.net_idx.mass_vector))
 
-        # throw("we outta here")
         # Record how many times we've failed for later
         num_failed += 1
 
         # Halve the time step after 1 failed attempt
         num_tries += 1
         if num_tries > 1
+            @printf "\t\tHalving time step\n"
             nd.time.step /= 2
             num_tries = 0
-            @printf "\t\tHalving time step\n"
         end
 
         # Update all the data
@@ -103,7 +102,7 @@ function SolveNetwork!(nd::NetworkData, dump_ytime::Bool=false)
 
     iteration = 0
     failed_iterations = 0
-    @printf "Time: %e,\tIteration #: %d,\tFailed Iterations: %d,\tAvg. Iterations/Timestep: %f\n" nd.time.current iteration failed_iterations (failed_iterations + iteration)/iteration
+    @printf "Time: %e,\tTime step: %e\tIteration #: %d,\tFailed Iterations: %d,\tAvg. Iterations/Timestep: %f\n" nd.time.current nd.time.step iteration failed_iterations (failed_iterations + iteration)/iteration
     while nd.time.current < nd.time.stop
         iteration += 1
 
@@ -113,7 +112,7 @@ function SolveNetwork!(nd::NetworkData, dump_ytime::Bool=false)
         fill_jacobian!(nd)
         update_ydot!(nd)
         
-        @printf "Time: %e,\tIteration #: %d,\tFailed Iterations: %d,\tAvg. Iterations/Timestep: %f\n" nd.time.current iteration failed_iterations (failed_iterations + iteration)/iteration
+        @printf "Time: %e,\tTime step: %e,\tIteration #: %d,\tFailed Iterations: %d,\tAvg. Iterations/Timestep: %f\n" nd.time.current nd.time.step iteration failed_iterations (failed_iterations + iteration)/iteration
         if dump_ytime
             result = Result(nd)
             dump_iteration(result, nd.trajectory, nd.time, iteration, "/Users/pvirally/Dropbox/Waterloo/Co-op/TRIUMF/output/wind-beta+ncap+alpha+photo+moller-YTime.txt")
