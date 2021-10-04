@@ -50,7 +50,11 @@ function dump_result(nd::NetworkData)
     result = Result(nd)
     open(nd.output_info.final_output_path, "w") do out_file
         # TODO: This should really write [Int64 Int64 Float64], but right now it gets promoted to [Float64 Float64 Float64]
-        writedlm(out_file, [result.proton_nums result.neutron_nums.+result.proton_nums result.abundance])
+        idxs = .!iszero.(result.abundance)
+        Zs = result.proton_nums[idxs]
+        As = Zs .+ result.neutron_nums[idxs]
+        ys = result.abundance[idxs]
+        writedlm(out_file, [Zs As ys])
     end
 end
 
@@ -64,10 +68,10 @@ function dump_iteration(nd::NetworkData, iteration::Int64)
     mode = iteration == 1 ? "w" : "a"
     open(nd.output_info.iteration_output_path, mode) do out_file
         write(out_file, "$(iteration)\t$(time.current)\t$(curr_traj.temperature)\t$(curr_traj.density)\n")
-        last_idx = findall(x->!iszero(x), result.abundance)[end]
-        Zs = result.proton_nums[1:last_idx]
-        As = result.proton_nums[1:last_idx] .+ result.neutron_nums[1:last_idx]
-        ys = result.abundance[1:last_idx]
+        idxs = .!iszero.(result.abundance)
+        Zs = result.proton_nums[idxs]
+        As = Zs .+ result.neutron_nums[idxs]
+        ys = result.abundance[idxs]
         writedlm(out_file, [Zs As ys])
         write(out_file, "\n")
     end
