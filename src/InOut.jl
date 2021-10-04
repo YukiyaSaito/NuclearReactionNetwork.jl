@@ -231,9 +231,7 @@ function NetworkData(path::String)
 
     # Get the reaction data
     reaction_data::ReactionData = initialize_reactions()
-    println("hi")
     included_reactions::IncludedReactions = IncludedReactions(false, false, false, false)
-    println("hi")
     for dataset in j["reactions"]
         read_dataset!(reaction_data, included_reactions, dataset, net_idx)
     end
