@@ -27,7 +27,7 @@ struct OutputInfo
     iteration_output_path::Union{Missing, String}
 end
 
-struct IncludedReactions
+mutable struct IncludedReactions
     ncap::Bool
     probdecay::Bool
     alphadecay::Bool
@@ -234,10 +234,18 @@ end
 
 function update_ydot!(nd::NetworkData; use_yproposed::Bool=false)
     initialize_ydot!(nd)
-    fill_neutroncapture_ydot!(nd, use_yproposed)
-    fill_probdecay_ydot!(nd, use_yproposed)
-    fill_alphadecay_ydot!(nd, use_yproposed)
-    fill_photodissociation_ydot!(nd, use_yproposed)
+    if nd.included_reactions.ncap
+        fill_neutroncapture_ydot!(nd, use_yproposed)
+    end
+    if nd.included_reactions.probdecay
+        fill_probdecay_ydot!(nd, use_yproposed)
+    end
+    if nd.included_reactions.alphadecay
+        fill_alphadecay_ydot!(nd, use_yproposed)
+    end
+    if nd.included_reactions.photodissociation
+        fill_photodissociation_ydot!(nd, use_yproposed)
+    end
 end
 
 function fill_initial_abundance!(abundance_index::Matrix{Int64}, abundance_vector::Vector{Float64}, abundance::Vector{Float64}, net_idx::NetworkIndex)
@@ -428,10 +436,18 @@ function fill_jacobian!(nd::NetworkData; use_yproposed::Bool=false)
         mul!(nd.jacobian, nd.jacobian, 0)
     end
 
-    fill_jacobian_neutroncapture!(nd, use_yproposed)
-    fill_jacobian_probdecay!(nd, use_yproposed)
-    fill_jacobian_alphadecay!(nd, use_yproposed)
-    fill_jacobian_photodissociation!(nd, use_yproposed)
+    if nd.included_reactions.ncap
+        fill_jacobian_neutroncapture!(nd, use_yproposed)
+    end
+    if nd.included_reactions.probdecay
+        fill_jacobian_probdecay!(nd, use_yproposed)
+    end
+    if nd.included_reactions.alphadecay
+        fill_jacobian_alphadecay!(nd, use_yproposed)
+    end
+    if nd.included_reactions.photodissociation
+        fill_jacobian_photodissociation!(nd, use_yproposed)
+    end
 
     if nd.jacobian isa Matrix{Float64}
         nd.jacobian = sparse(nd.jacobian)

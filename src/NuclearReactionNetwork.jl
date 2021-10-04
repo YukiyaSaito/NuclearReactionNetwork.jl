@@ -32,8 +32,6 @@ export main
 
 # test
 export get_networksize
-export read_probdecay!
-export read_ncap!
 export read_test
 export read_trajectory
 

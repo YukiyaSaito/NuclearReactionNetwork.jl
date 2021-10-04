@@ -173,22 +173,26 @@ function read_photodissociation!(reaction_data::ReactionData, path::String, net_
     end
 end
 
-function read_dataset!(reaction_data::ReactionData, dataset::DataStructures.OrderedDict{String, Any}, net_idx::NetworkIndex)
+function read_dataset!(reaction_data::ReactionData, included_reactions::IncludedReactions, dataset::DataStructures.OrderedDict{String, Any}, net_idx::NetworkIndex)
     if !get(dataset, "active", false)
         return
     end
     if dataset["rxn_type"] == "ncap"
         println("Reading neutron capture...")
         read_ncap!(reaction_data, dataset["path"], net_idx)
+        included_reactions.ncap = true
     elseif dataset["rxn_type"] == "probdecay"
         println("Reading beta decay...")
         read_probdecay!(reaction_data, dataset["path"], net_idx)
+        included_reactions.probdecay = true
     elseif dataset["rxn_type"] == "alphadecay"
         println("Reading alpha decay...")
         read_alphadecay!(reaction_data, dataset["path"], net_idx)
+        included_reactions.alphadecay = true
     elseif dataset["rxn_type"] == "photodissociation"
         println("Reading photodissociation...")
         read_photodissociation!(reaction_data, dataset["path"], net_idx)
+        included_reactions.photodissociation = true
     else
         error("Unknown reaction type: $(dataset["rxn_type"])")
     end
@@ -227,9 +231,11 @@ function NetworkData(path::String)
 
     # Get the reaction data
     reaction_data::ReactionData = initialize_reactions()
+    println("hi")
     included_reactions::IncludedReactions = IncludedReactions(false, false, false, false)
+    println("hi")
     for dataset in j["reactions"]
-        read_dataset!(reaction_data, dataset, net_idx)
+        read_dataset!(reaction_data, included_reactions, dataset, net_idx)
     end
 
     # Get the trajectory

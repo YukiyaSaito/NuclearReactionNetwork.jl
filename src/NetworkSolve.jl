@@ -40,7 +40,7 @@ function lu_dot!(F::UmfpackLU, S::SparseMatrixCSC{<:UMFVTypes,<:UMFITypes}; chec
     return F
 end
 
-function newton_raphson_iteration!(nd::NetworkData, F::UmfpackLU, Δy::Vector{Float64})
+function newton_raphson_iteration!(nd::NetworkData, Δy::Vector{Float64})
     nd.yproposed .= nd.abundance
     # lu_dot!(F,jacobian); 
     # ldiv!(Δy,F,(ydot.-(yproposed.-abundance) ./ nd.time.step))
@@ -98,7 +98,7 @@ end
 
 function SolveNetwork!(nd::NetworkData, dump_ytime::Bool=false)
     Δy = Vector{Float64}(undef,size(nd.abundance)[1])
-    F = lu(nd.jacobian)
+    # F = lu(nd.jacobian)
     # ps = MKLPardisoSolver()
 
     iteration = 0
@@ -108,7 +108,7 @@ function SolveNetwork!(nd::NetworkData, dump_ytime::Bool=false)
         iteration += 1
 
         clip_abundance!(nd)
-        failed_iterations += newton_raphson_iteration!(nd, F, Δy)
+        failed_iterations += newton_raphson_iteration!(nd, Δy)
         update_timestep_size!(nd, Δy)
         fill_jacobian!(nd)
         update_ydot!(nd)
