@@ -107,10 +107,8 @@ function fill_neutroncapture_ydot!(nd::NetworkData, use_yproposed::Bool=false)
         abundance_factor = 1.0
         for reactant in capture.reactant
             z_r, n_r = reactant
-            if zn_in_network(z_r, n_r, nd.net_idx)
-                reactant_idx = zn_to_index(z_r, n_r, nd.net_idx)
-                abundance_factor *= abundance[reactant_idx]
-            end
+            reactant_idx = zn_to_index(z_r, n_r, nd.net_idx)
+            abundance_factor *= abundance[reactant_idx]
         end
         if iszero(abundance_factor)
             continue
@@ -119,19 +117,15 @@ function fill_neutroncapture_ydot!(nd::NetworkData, use_yproposed::Bool=false)
         # Update ydot for the reactants
         for reactant in capture.reactant
             z_r, n_r = reactant
-            if zn_in_network(z_r, n_r, nd.net_idx)
-                reactant_idx = zn_to_index(z_r, n_r, nd.net_idx)
-                nd.ydot[reactant_idx] += -1.0 * curr_traj.density * rate * abundance_factor
-            end
+            reactant_idx = zn_to_index(z_r, n_r, nd.net_idx)
+            nd.ydot[reactant_idx] += -1.0 * curr_traj.density * rate * abundance_factor
         end
 
         # Update ydot for the products
         for product in capture.product
             z_p, n_p = product
-            if zn_in_network(z_p, n_p, nd.net_idx)
-                product_idx = zn_to_index(z_p, n_p, nd.net_idx)
-                nd.ydot[product_idx] += rate * curr_traj.density * abundance_factor
-            end
+            product_idx = zn_to_index(z_p, n_p, nd.net_idx)
+            nd.ydot[product_idx] += rate * curr_traj.density * abundance_factor
         end
     end
 end
@@ -150,9 +144,6 @@ function fill_alphadecay_ydot!(nd::NetworkData, use_yproposed::Bool=false)
 
         # Grab the abundace of the reactant
         z_r, n_r = decay.reactant
-        if !zn_in_network(z_r, n_r, nd.net_idx)
-            continue
-        end
         reactant_idx = zn_to_index(z_r, n_r, nd.net_idx)
         abundance_factor = abundance[reactant_idx]
         if iszero(abundance_factor)
@@ -165,9 +156,6 @@ function fill_alphadecay_ydot!(nd::NetworkData, use_yproposed::Bool=false)
         # Update ydot for the products
         for product in decay.product
             z_p, n_p = product
-            if !zn_in_network(z_p, n_p, nd.net_idx)
-                continue
-            end
             product_idx = zn_to_index(z_p, n_p, nd.net_idx)
             nd.ydot[product_idx] += 1.0 * rate * abundance_factor
         end
@@ -212,9 +200,6 @@ function fill_photodissociation_ydot!(nd::NetworkData, use_yproposed::Bool=false
 
         # Grab the abundace of the reactant
         z_r, n_r = reaction.product[1]
-        if !zn_in_network(z_r, n_r, nd.net_idx)
-            continue
-        end
         A_r = z_r + n_r
         reactant_idx = zn_to_index(z_r, n_r, nd.net_idx)
         abundance_factor = abundance[reactant_idx]
@@ -241,9 +226,6 @@ function fill_photodissociation_ydot!(nd::NetworkData, use_yproposed::Bool=false
         # Update ydot for the products
         for product in reaction.reactant
             z_p, n_p = product
-            if !zn_in_network(z_p, n_p, nd.net_idx)
-                continue
-            end
             product_idx = zn_to_index(z_p, n_p, nd.net_idx)
             nd.ydot[product_idx] += 1.0 * reverse_rate * abundance_factor
         end
@@ -287,17 +269,11 @@ function fill_jacobian_probdecay!(nd::NetworkData, use_yproposed::Bool=false)
 
     for decay in values(nd.reaction_data.probdecay)
         z_r, n_r = decay.reactant[1]
-        if !zn_in_network(z_r, n_r, nd.net_idx)
-            continue
-        end
         reactant_idx = zn_to_index(z_r, n_r, nd.net_idx)
         nd.jacobian[reactant_idx, reactant_idx] += -1.0 * decay.rate
 
         for i in 1:size(decay.product)[1]
             z_p, n_p = decay.product[i]
-            if !zn_in_network(z_p, n_p, nd.net_idx)
-                continue
-            end
             product_idx = zn_to_index(z_p, n_p, nd.net_idx)
             nd.jacobian[product_idx, reactant_idx] += decay.average_number[i] * decay.rate
         end
@@ -323,27 +299,18 @@ function fill_jacobian_neutroncapture!(nd::NetworkData, use_yproposed::Bool=fals
         end
 
         # Neutron index and abundance
-        if !zn_in_network(0, 1, nd.net_idx) # TODO: Are neutrons always in the network making this check redundant?
-            continue
-        end
         neutron_idx = zn_to_index(0, 1, nd.net_idx)
         neutron_abundance = abundance[neutron_idx]
 
         # Reactant index and abundance
         reactant = capture.reactant[2]
         z_r, n_r = reactant
-        if !zn_in_network(z_r, n_r, nd.net_idx)
-            continue
-        end
         reactant_idx = zn_to_index(z_r, n_r, nd.net_idx)
         reactant_abundance = abundance[reactant_idx]
 
         # Product index
         product = capture.product[1]
         z_p, n_p = product
-        if !zn_in_network(z_p, n_p, nd.net_idx)
-            continue
-        end
         product_idx = zn_to_index(z_p, n_p, nd.net_idx)
 
         # Double counting factor TODO: Is this always 1.0?
@@ -369,17 +336,11 @@ function fill_jacobian_alphadecay!(nd::NetworkData, use_yproposed::Bool=false)
 
     for decay in nd.reaction_data.alphadecay
         z_r, n_r = decay.reactant
-        if !zn_in_network(z_r, n_r, nd.net_idx)
-            continue
-        end
         reactant_idx = zn_to_index(z_r, n_r, nd.net_idx)
         nd.jacobian[reactant_idx, reactant_idx] += -1.0 * decay.rate
 
         for product in decay.product
             z_p, n_p = product
-            if !zn_in_network(z_p, n_p, nd.net_idx)
-                continue
-            end
             product_idx = zn_to_index(z_p, n_p, nd.net_idx)
             nd.jacobian[product_idx, reactant_idx] += decay.rate
         end
@@ -411,22 +372,13 @@ function fill_jacobian_photodissociation!(nd::NetworkData, use_yproposed::Bool=f
 
         # Reactant index
         z_r, n_r = reaction.product[1]
-        if !zn_in_network(z_r, n_r, nd.net_idx)
-            continue
-        end
         reactant_idx = zn_to_index(z_r, n_r, nd.net_idx)
 
         # Neutron (product) index
-        if !zn_in_network(0, 1, nd.net_idx) # TODO: Are neutrons always in the network making this check redundant?
-            continue
-        end
         neutron_idx = zn_to_index(0, 1, nd.net_idx)
 
         # Product index 
         z_p, n_p = reaction.reactant[2]
-        if !zn_in_network(z_p, n_p, nd.net_idx)
-            continue
-        end
         product_idx = zn_to_index(z_p, n_p, nd.net_idx)
 
         # Lookup partition function for the reactant (product of the forward reaction)
