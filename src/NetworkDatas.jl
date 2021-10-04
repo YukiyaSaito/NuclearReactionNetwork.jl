@@ -448,4 +448,10 @@ function initialize_and_fill_sparse_jacobian(networksize::Int64, nd::NetworkData
     fill_jacobian!(nd)
 end
 
+export other_thing
+function other_thing(nd::NetworkData)
+    initialize_ydot!(nd)
+    fill_probdecay_ydot!(nd)
+end
+
 end

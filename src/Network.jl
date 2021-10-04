@@ -48,7 +48,11 @@ function fill_boundary(raw_boundary::Matrix{Int64}) # Function berriering
     return NetworkBoundary(raw_boundary)
 end
 
-function get_networksize(networkboundary::NetworkBoundary) #Get the number of spicies included in the network
+function get_networksize(net_idx::NetworkIndex)
+    return net_idx.cum_isotopes[end]
+end
+
+function get_networksize(networkboundary::NetworkBoundary) # Get the number of species included in the network
     boundary = networkboundary.matrix
     networksize::Int64 = 0
     # println(size(boundary,1))
