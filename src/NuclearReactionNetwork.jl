@@ -18,8 +18,6 @@ import .InOut
 import .main
 
 # test
-import .read_probdecay!
-import .read_ncap!
 import .read_test
 import .read_trajectory
 
