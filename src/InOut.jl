@@ -4,6 +4,7 @@ using ..ReactionTypes
 using ..Network
 using ..Astro
 using ..Network
+using ..NetworkDatas
 
 export Result
 export dump_result
@@ -19,11 +20,11 @@ struct Result
     end
 end
 
-function Result(abundace::Vector{Float64}, net_idx::NetworkIndex)
-    boundary = net_idx.networkboundary.matrix
+function Result(nd::NetworkData)
+    boundary = nd.net_idx.networkboundary.matrix
 
-    zs = zeros(Int64, length(abundace))
-    ns = zeros(Int64, length(abundace))
+    zs = zeros(Int64, length(nd.abundance))
+    ns = zeros(Int64, length(nd.abundance))
 
     index = 1
     for (z, n_low, n_high) in eachrow(boundary)
@@ -32,7 +33,7 @@ function Result(abundace::Vector{Float64}, net_idx::NetworkIndex)
         ns[index:index+dn] = range(n_low, n_high, length=dn+1)
         index += dn + 1
     end
-    return Result(zs, ns, abundace)
+    return Result(zs, ns, nd.abundance)
 end
 
 function dump_result(result::Result, path::String)

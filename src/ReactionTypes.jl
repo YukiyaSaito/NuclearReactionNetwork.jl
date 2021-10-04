@@ -19,7 +19,6 @@ abstract type AbstractReaction end
 #     product::Vector{Vector{Int32}}
 # end
 
-
 mutable struct ProbDecay <: AbstractReaction
     reactant::Vector{Vector{Int64}} #[[Z_0, N_0], [Z_1, N_1], ... [Z_n, N_n]]
     product::Vector{Vector{Int64}}
@@ -27,8 +26,8 @@ mutable struct ProbDecay <: AbstractReaction
     average_number::Vector{Float64}
 end
 
-mutable struct NeutronCapture <: AbstractReaction #Temperature Dependent Reactions
-    reactant::Vector{Vector{Int64}} #[[Z_0, N_0], [Z_1, N_1], ... [Z_n, N_n]]
+mutable struct NeutronCapture <: AbstractReaction # Temperature Dependent Reactions
+    reactant::Vector{Vector{Int64}} # [[Z_0, N_0], [Z_1, N_1], ... [Z_n, N_n]]
     product::Vector{Vector{Int64}}
     rate::Interpolations.Extrapolation
     pfunc::Interpolations.Extrapolation
@@ -42,17 +41,6 @@ mutable struct AlphaDecay <: AbstractReaction
     product::Vector{Tuple{Int64, Int64}} # [(Z_0, N_0), (Z_1, N_1)]
     rate::Float64
 end
-
-# ProbDecay(reactant::Vector{Vector{Int64}}, 
-#             product::Vector{Vector{Int64}}, 
-#             rate::Float64, 
-#             average_number::Vector{Float64}) = ProbDecay(reactant, Set(product), rate, average_number)
-
-
-# struct ReverseReaction <: AbstractReaction
-
-# end
-
 
 # TODO: Replace all dicts to simple vectors
 mutable struct ReactionData
@@ -68,18 +56,13 @@ function initialize_reactions()
     return ReactionData(probdecay_dict, ncap_dict, alphadecay)
 end
 
-
-
 function read_probdecay!(path::String, reaction_data::ReactionData, net_idx::NetworkIndex) 
-#Read Fortran formatted PRISM input file for probabilistic decay.
-#reading line by line could be slow. Come back after implementing other parts.
+    # Read Fortran formatted PRISM input file for probabilistic decay.
+    # reading line by line could be slow. Come back after implementing other parts.
     open(path) do file
         infile = readlines(file)
         num_entry::Int64 = parse(Int, infile[1])
-        # println(num_entry)
-        # index = 1
         for i in 1:num_entry
-            # 
             reactant_z::Vector{Int64}=[parse(Int, ss) for ss in split(infile[6*(i-1)+2])]
             reactant_n::Vector{Int64}=[parse(Int, ss) for ss in split(infile[6*(i-1)+3])]
             product_z::Vector{Int64}=[parse(Int, ss) for ss in split(infile[6*(i-1)+4])]
@@ -108,22 +91,15 @@ function read_probdecay!(path::String, reaction_data::ReactionData, net_idx::Net
                 continue
             end
 
-            reaction_data.probdecay[reactant] = ProbDecay(reactant,product,rate,average_number)
-            # println(typeof(reactant_z[1]))
-        #     # println(reactant_n)
-        #     # println(product_z)
-        #     # println(product_n)
-        #     # println(rate)
-        #     # println(average_number)
+            reaction_data.probdecay[copy(reactant)] = ProbDecay(copy(reactant), copy(product), copy(rate), copy(average_number))
         end
-        # println(reaction_data)
     end
     return reaction_data
 end
     
 function read_ncap!(path::String, reaction_data::ReactionData, net_idx::NetworkIndex) 
-    #Read Fortran formatted input file for temperature dependent reaction rate. 
-    #reading line by line could be slow. Come back after implementing other parts.
+    # Read Fortran formatted input file for temperature dependent reaction rate. 
+    # reading line by line could be slow. Come back after implementing other parts.
     open(path) do file
         infile = readlines(file)
         num_entry::Int64 = parse(Int, infile[1])
@@ -170,12 +146,6 @@ function read_ncap!(path::String, reaction_data::ReactionData, net_idx::NetworkI
                 rate_lerp = LinearInterpolation(copy(temperature), copy(rate_temp), extrapolation_bc=Flat())
                 pfunc_lerp = LinearInterpolation(copy(temperature), copy(pfunc_temp), extrapolation_bc=Flat())
                 reaction_data.neutroncapture[copy(reactant_temp)] = NeutronCapture(copy(reactant_temp), copy(product_temp), rate_lerp, pfunc_lerp, copy(current_rate), missing)
-    # 			#     # println(reactant_n)
-    #             #     # println(product_z)
-    #             #     # println(product_n)
-    #             #     # println(rate)
-    #             #     # println(average_number)
-                # println(Set(reactant_temp))
             end
         end
     end
@@ -183,8 +153,8 @@ function read_ncap!(path::String, reaction_data::ReactionData, net_idx::NetworkI
 end
 
 function read_alphadecay!(path::String, reaction_data::ReactionData, net_idx::NetworkIndex)
-    #Read Fortran formatted input file for temperature dependent reaction rate. 
-    #reading line by line could be slow. Come back after implementing other parts.
+    # Read Fortran formatted input file for temperature dependent reaction rate. 
+    # reading line by line could be slow. Come back after implementing other parts.
     open(path) do file
         lines = readlines(file)
         num_entries::Int64 = parse(Int, lines[1])
@@ -245,13 +215,12 @@ function read_photodissociation!(reverse_reaction_file::String, reaction_data::R
                 continue
             end
 
-            key = products
+            key = products # key = [[Z1, N1], [Z2, N2]]
             if !haskey(reaction_data.neutroncapture, key)
-                key = [products[2], products[1]]
+                key = [products[2], products[1]] # Maybe the key should be [[Z2, N2], [Z1, N1]]
             end
             if !haskey(reaction_data.neutroncapture, key)
-                # println("Reverse reaction ($(reactant[1]), $(reactant[2])) doesn't have forward reaction")
-                continue
+                continue # We don't have the associated forward rate
             end
             reaction_data.neutroncapture[key].q = q
         end

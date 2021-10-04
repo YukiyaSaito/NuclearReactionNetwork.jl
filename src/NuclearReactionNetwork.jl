@@ -4,6 +4,7 @@ module NuclearReactionNetwork
 include("./Astro.jl")
 include("./Network.jl")
 include("./ReactionTypes.jl")
+include("./NetworkDatas.jl")
 include("./InOut.jl")
 include("./NetworkSolve.jl")
 
@@ -11,6 +12,7 @@ include("./main.jl")
 
 import .ReactionTypes
 import .Network
+import .NetworkDatas
 import .NetworkSolve
 import .InOut
 import .main
@@ -20,7 +22,6 @@ import .read_probdecay!
 import .read_ncap!
 import .read_test
 import .read_trajectory
-
 
 export initialize_reactions
 export read_boundary

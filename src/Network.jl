@@ -39,7 +39,7 @@ struct NetworkIndex
 end
 
 function read_boundary(path::String)
-    #Read Fortran formatted extent file. It determines the limit on the nuclear chart.
+    # Read Fortran formatted extent file. It determines the limit on the nuclear chart.
     raw_boundary::Matrix{Int64} = readdlm(path,' ',Int)
     fill_boundary(raw_boundary)
 end
