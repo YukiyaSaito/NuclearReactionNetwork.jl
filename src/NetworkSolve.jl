@@ -18,8 +18,8 @@ using Pardiso
 export check_mass_fraction_unity
 export SolveNetwork!
 
-function check_mass_fraction_unity(yproposed::Vector{Float64}, mass_vector::Vector{Float64}, tolerance::Float64=1e-8)
-    return abs(1 - dot(yproposed, mass_vector)) < tolerance
+function check_mass_fraction_unity(nd::NetworkData, tolerance::Float64=1e-8)
+    return abs(1 - dot(nd.yproposed, nd.mass_vector)) < tolerance
 end
 
 function lu_dot!(F::UmfpackLU, S::SparseMatrixCSC{<:UMFVTypes,<:UMFITypes}; check::Bool=true)
@@ -47,11 +47,9 @@ function newton_raphson_iteration!(nd::NetworkData, F::UmfpackLU, Δy::Vector{Fl
     Δy .= nd.jacobian \ ((nd.ydot .- (nd.yproposed .- nd.abundance) ./ nd.time.step))
     nd.yproposed .+= Δy
 
-    @printf "ydot[1:5]: %a\t%a\t%a\t%a\t%a\n" nd.ydot[1:5]...
-
     num_failed::Int64 = 0
     num_tries::Int64 = 0
-    while !check_mass_fraction_unity(nd.yproposed, nd.net_idx.mass_vector)
+    while !check_mass_fraction_unity(nd)
     # while num_failed < 1
         @printf "\tnot converged; 1 - mass fraction: %e\n" abs(1 - dot(nd.yproposed, nd.net_idx.mass_vector))
 
@@ -62,9 +60,7 @@ function newton_raphson_iteration!(nd::NetworkData, F::UmfpackLU, Δy::Vector{Fl
         # Halve the time step after 1 failed attempt
         num_tries += 1
         if num_tries > 1
-            @printf "\t\t\tPrev time step: %a\n" nd.time.step
             nd.time.step /= 2
-            @printf "\t\t\tCurr time step: %a\n" nd.time.step
             num_tries = 0
             @printf "\t\tHalving time step\n"
         end
@@ -73,12 +69,7 @@ function newton_raphson_iteration!(nd::NetworkData, F::UmfpackLU, Δy::Vector{Fl
         fill_jacobian!(nd, use_yproposed=true)
         update_ydot!(nd, use_yproposed=true)
 
-        @printf "\t\t\tTime step: %a\n" nd.time.step
-        @printf "\t\t\tydot[1:5]: %a\t%a\t%a\t%a\t%a\n" nd.ydot[1:5]...
-        @printf "\t\t\typroposed[1:5]: %a\t%a\t%a\t%a\t%a\n" nd.yproposed[1:5]...
-        @printf "\t\t\tabundance[1:5]: %a\t%a\t%a\t%a\t%a\n" nd.abundance[1:5]...
         Δy .= nd.jacobian \ ((nd.ydot .- (nd.yproposed .- nd.abundance) ./ nd.time.step))
-        @printf "\t\t\tΔy[1:5]: %a\t%a\t%a\t%a\t%a\n" Δy[1:5]...
         nd.yproposed .+= Δy
     end
     nd.abundance .= nd.yproposed # FIXME: Performance boost: This could be just regular assignment (=, not .=) because of how NetworkDatas is setup

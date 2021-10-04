@@ -55,7 +55,6 @@ end
 function get_networksize(networkboundary::NetworkBoundary) # Get the number of species included in the network
     boundary = networkboundary.matrix
     networksize::Int64 = 0
-    # println(size(boundary,1))
     for z in 1:size(boundary,1)
         n_low::Int64 = boundary[z,2]
         n_high::Int64 = boundary[z,3]

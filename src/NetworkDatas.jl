@@ -428,8 +428,6 @@ function fill_jacobian!(nd::NetworkData; use_yproposed::Bool=false)
         mul!(nd.jacobian, nd.jacobian, 0)
     end
 
-    @printf "Temperature: %a\n" get_current_trajectory(nd.trajectory, nd.time.current).temperature
-
     fill_jacobian_neutroncapture!(nd, use_yproposed)
     fill_jacobian_probdecay!(nd, use_yproposed)
     fill_jacobian_alphadecay!(nd, use_yproposed)
