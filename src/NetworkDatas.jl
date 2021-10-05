@@ -55,11 +55,12 @@ function fill_probdecay_ydot!(nd::NetworkData, use_yproposed::Bool=false)
     for decay in values(nd.reaction_data.probdecay)
         z_r, n_r = decay.reactant[1]
         reactant_idx = zn_to_index(z_r, n_r, nd.net_idx)
-        nd.ydot[reactant_idx] += -1.0 * decay.rate * abundance[reactant_idx]
 
         if iszero(decay.rate) || iszero(abundance[reactant_idx])
             continue
         end
+
+        nd.ydot[reactant_idx] += -1.0 * decay.rate * abundance[reactant_idx]
 
         for i in 1:size(decay.product, 1)
             z_p, n_p = decay.product[i]
@@ -213,11 +214,11 @@ end
 
 function update_ydot!(nd::NetworkData; use_yproposed::Bool=false)
     initialize_ydot!(nd)
-    if nd.included_reactions.ncap
-        fill_neutroncapture_ydot!(nd, use_yproposed)
-    end
     if nd.included_reactions.probdecay
         fill_probdecay_ydot!(nd, use_yproposed)
+    end
+    if nd.included_reactions.ncap
+        fill_neutroncapture_ydot!(nd, use_yproposed)
     end
     if nd.included_reactions.alphadecay
         fill_alphadecay_ydot!(nd, use_yproposed)
@@ -408,11 +409,11 @@ function fill_jacobian!(nd::NetworkData; use_yproposed::Bool=false)
         mul!(nd.jacobian, nd.jacobian, 0)
     end
 
-    if nd.included_reactions.ncap
-        fill_jacobian_neutroncapture!(nd, use_yproposed)
-    end
     if nd.included_reactions.probdecay
         fill_jacobian_probdecay!(nd, use_yproposed)
+    end
+    if nd.included_reactions.ncap
+        fill_jacobian_neutroncapture!(nd, use_yproposed)
     end
     if nd.included_reactions.alphadecay
         fill_jacobian_alphadecay!(nd, use_yproposed)
