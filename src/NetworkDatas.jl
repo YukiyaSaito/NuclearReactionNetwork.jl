@@ -28,7 +28,7 @@ mutable struct IncludedReactions
     photodissociation::Bool
 end
 
-mutable struct NetworkData
+struct NetworkData
     net_idx::NetworkIndex
     reaction_data::ReactionData
     trajectory::Trajectory
