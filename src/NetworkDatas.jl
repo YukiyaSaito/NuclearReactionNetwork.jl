@@ -36,7 +36,7 @@ mutable struct NetworkData
     yproposed::Vector{Float64}
     ydot::Vector{Float64}
     time::Time
-    jacobian::Union{Matrix{Float64}, SparseMatrixCSC{Float64, Int64}}
+    jacobian::SparseMatrixCSC{Float64, Int64}
     output_info::OutputInfo
     included_reactions::IncludedReactions
 end
@@ -405,9 +405,7 @@ using Printf
 function fill_jacobian!(nd::NetworkData; use_yproposed::Bool=false)
     # Jacobian coordinate: (reactant, product)
 
-    if nd.jacobian isa SparseMatrixCSC{Float64, Int64}
-        mul!(nd.jacobian, nd.jacobian, 0)
-    end
+    mul!(nd.jacobian, nd.jacobian, 0)
 
     if nd.included_reactions.probdecay
         fill_jacobian_probdecay!(nd, use_yproposed)
@@ -420,10 +418,6 @@ function fill_jacobian!(nd::NetworkData; use_yproposed::Bool=false)
     end
     if nd.included_reactions.photodissociation
         fill_jacobian_photodissociation!(nd, use_yproposed)
-    end
-
-    if nd.jacobian isa Matrix{Float64}
-        nd.jacobian = sparse(nd.jacobian)
     end
 
     mul!(nd.jacobian, nd.jacobian, -1)
