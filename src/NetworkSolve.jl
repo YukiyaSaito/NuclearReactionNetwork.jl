@@ -72,13 +72,7 @@ function newton_raphson_iteration!(nd::NetworkData, Δy::Vector{Float64})
         nd.yproposed .+= Δy
     end
     nd.abundance .= nd.yproposed # FIXME: Performance boost: This could be just regular assignment (=, not .=) because of how NetworkDatas is setup
-    nd.time.current += nd.time.step
-
-    # Cap the time
-    if nd.time.current >= nd.time.stop
-        # nd.time.step = nd.time.stop - (nd.time.current - nd.time.step) TODO: Add this?
-        nd.time.current = nd.time.stop
-    end
+    step_time!(nd.time)
     return num_failed
 end
 

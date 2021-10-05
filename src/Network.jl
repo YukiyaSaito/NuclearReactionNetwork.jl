@@ -9,6 +9,7 @@ export get_networksize
 export zn_to_index
 export zn_in_network
 export Time
+export step_time!
 
 mutable struct Time
     current::Float64
@@ -22,6 +23,15 @@ mutable struct Time
     end
 end
 
+function step_time!(time::Time)
+    time.current += time.step
+
+    # Cap the time
+    if time.current >= time.stop
+        # time.step = time.stop - (time.current - time.step) TODO: Add this?
+        time.current = time.stop
+    end
+end
 
 struct NetworkBoundary{T<:Matrix{Int64}}
     matrix::T
