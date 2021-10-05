@@ -30,8 +30,8 @@ function read_ncap(path::String)
     ncap_dict = Dict{Vector{Vector{Int64}}, NRN.NeutronCapture}()
     open(path) do file
         lines = readlines(file)
-        num_entry::Int64 = parse(Int, lines[1])
-        pfunc_flag::Int64 = parse(Int, lines[2])
+        num_entry::Int64 = parse(Int64, lines[1])
+        pfunc_flag::Int64 = parse(Int64, lines[2])
         temperature::Vector{Float64} = [parse(Float64, s) for s in split(lines[3])]
         if pfunc_flag == 1
             for i in 1:num_entry
@@ -60,7 +60,7 @@ function read_probdecay(path::String)
     probdecay_dict = Dict{Vector{Vector{Int64}}, NRN.ProbDecay}()
     open(path) do file
         lines = readlines(file)
-        num_entry::Int64 = parse(Int, lines[1])
+        num_entry::Int64 = parse(Int64, lines[1])
         for i in 1:num_entry
             z_rs::Vector{Int64} = [parse(Int64, s) for s in split(lines[6*(i-1)+2])]
             n_rs::Vector{Int64} = [parse(Int64, s) for s in split(lines[6*(i-1)+3])]
@@ -85,7 +85,7 @@ function read_alphadecay(path::String)
     alphadecay = Vector{NRN.AlphaDecay}()
     open(path) do file
         lines = readlines(file)
-        num_entries::Int64 = parse(Int, lines[1])
+        num_entries::Int64 = parse(Int64, lines[1])
         for i in 1:num_entries
             z_r = parse(Int64, lines[5*(i-1) + 2])
             n_r = parse(Int64, lines[5*(i-1) + 3])
