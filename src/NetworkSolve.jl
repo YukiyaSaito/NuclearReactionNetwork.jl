@@ -95,14 +95,15 @@ function clip_abundance!(nd::NetworkData, min_val::Float64=0.0)
     nd.abundance[nd.abundance .< min_val] .= 0.0
 end
 
-function SolveNetwork!(nd::NetworkData, dump_ytime::Bool=false)
-    Δy = Vector{Float64}(undef,size(nd.abundance)[1])
+function SolveNetwork!(nd::NetworkData)
+    Δy = Vector{Float64}(undef, length(nd.abundance))
     # F = lu(nd.jacobian)
     # ps = MKLPardisoSolver()
 
     iteration = 0
     failed_iterations = 0
-    @printf "Time: %e,\tTime step: %e\tIteration #: %d,\tFailed Iterations: %d,\tAvg. Iterations/Timestep: %f\n" nd.time.current nd.time.step iteration failed_iterations (failed_iterations + iteration)/iteration
+    @printf "Time: %e,\tTime step: %e,\tIteration #: %d,\tFailed Iterations: %d,\tAvg. Iterations/Timestep: %f\n" nd.time.current nd.time.step iteration failed_iterations (failed_iterations + iteration)/iteration
+    dump_iteration(nd, iteration)
     while nd.time.current < nd.time.stop
         iteration += 1
 
@@ -113,10 +114,7 @@ function SolveNetwork!(nd::NetworkData, dump_ytime::Bool=false)
         update_ydot!(nd)
         
         @printf "Time: %e,\tTime step: %e,\tIteration #: %d,\tFailed Iterations: %d,\tAvg. Iterations/Timestep: %f\n" nd.time.current nd.time.step iteration failed_iterations (failed_iterations + iteration)/iteration
-        if dump_ytime
-            result = Result(nd)
-            dump_iteration(result, nd.trajectory, nd.time, iteration, "/Users/pvirally/Dropbox/Waterloo/Co-op/TRIUMF/output/wind-beta+ncap+alpha+photo+moller-YTime.txt")
-        end
+        dump_iteration(nd, iteration)
     end
 end
 

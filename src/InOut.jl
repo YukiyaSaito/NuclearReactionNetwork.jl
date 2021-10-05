@@ -64,10 +64,10 @@ function dump_iteration(nd::NetworkData, iteration::Int64)
     end
 
     result = Result(nd)
-    curr_traj = get_current_trajectory(trajectory, time.current)
-    mode = iteration == 1 ? "w" : "a"
+    curr_traj = get_current_trajectory(nd.trajectory, nd.time.current)
+    mode = iteration == 0 ? "w" : "a"
     open(nd.output_info.iteration_output_path, mode) do out_file
-        write(out_file, "$(iteration)\t$(time.current)\t$(curr_traj.temperature)\t$(curr_traj.density)\n")
+        write(out_file, "$(iteration)\t$(nd.time.current)\t$(curr_traj.temperature)\t$(curr_traj.density)\n")
         idxs = .!iszero.(result.abundance)
         Zs = result.proton_nums[idxs]
         As = Zs .+ result.neutron_nums[idxs]
@@ -269,9 +269,11 @@ function NetworkData(path::String)
     end
 
     # Initialize ydot
+    println("Creating Ẏ...")
     ydot::Vector{Float64} = zeros(Float64, networksize)
 
     # Create the Jacobian
+    println("Creating the Jacobian...")
     jacobian::Matrix{Float64} = zeros(Float64, (networksize, networksize))
 
     # Grab the output info
