@@ -274,7 +274,7 @@ function NetworkData(path::String)
 
     # Create the Jacobian
     println("Creating the Jacobian...")
-    jacobian::Matrix{Float64} = zeros(Float64, (networksize, networksize))
+    jacobian::SparseMatrixCSC{Float64, Int64} = spzeros(Float64, Int64, (networksize, networksize))
 
     # Grab the output info
     println("Reading the output information...")
