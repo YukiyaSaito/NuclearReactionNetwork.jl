@@ -214,17 +214,11 @@ function read_initial_abundance(path::String, net_idx::NetworkIndex)
     abundance = zeros(Float64, get_networksize(net_idx))
     for (z, a, y) in data
         n = a - z
-        if zn_in_network(z, n, net_idx)
-            idx = zn_to_index(z, n, net_idx)
-            abundance[idx] += y/a
-        else
-            subtract = 1
-            while !zn_in_network(z, a-subtract, net_idx) # FIXME: Are we sure this is correct?
-                subtract += 1
-            end
-            idx = zn_to_index(z, n, net_idx)
-            abundance[idx] += y/(z+n)
+        while !zn_in_network(z, n, net_idx)
+            n -= 1
         end
+        idx = zn_to_index(z, n, net_idx)
+        abundance[idx] += y/(z+n)
     end
     return abundance
 end
