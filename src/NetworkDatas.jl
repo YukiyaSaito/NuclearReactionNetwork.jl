@@ -214,8 +214,8 @@ end
 
 function update_ydot!(nd::NetworkData; use_yproposed::Bool=false)
     initialize_ydot!(nd)
-    if nd.included_reactions.probdecay
-        fill_probdecay_ydot!(nd, use_yproposed)
+    if nd.included_reactions.photodissociation
+        fill_photodissociation_ydot!(nd, use_yproposed)
     end
     if nd.included_reactions.ncap
         fill_neutroncapture_ydot!(nd, use_yproposed)
@@ -223,8 +223,8 @@ function update_ydot!(nd::NetworkData; use_yproposed::Bool=false)
     if nd.included_reactions.alphadecay
         fill_alphadecay_ydot!(nd, use_yproposed)
     end
-    if nd.included_reactions.photodissociation
-        fill_photodissociation_ydot!(nd, use_yproposed)
+    if nd.included_reactions.probdecay
+        fill_probdecay_ydot!(nd, use_yproposed)
     end
 end
 
@@ -409,8 +409,8 @@ function fill_jacobian!(nd::NetworkData; use_yproposed::Bool=false)
         mul!(nd.jacobian, nd.jacobian, 0)
     end
 
-    if nd.included_reactions.probdecay
-        fill_jacobian_probdecay!(nd, use_yproposed)
+    if nd.included_reactions.photodissociation
+        fill_jacobian_photodissociation!(nd, use_yproposed)
     end
     if nd.included_reactions.ncap
         fill_jacobian_neutroncapture!(nd, use_yproposed)
@@ -418,8 +418,8 @@ function fill_jacobian!(nd::NetworkData; use_yproposed::Bool=false)
     if nd.included_reactions.alphadecay
         fill_jacobian_alphadecay!(nd, use_yproposed)
     end
-    if nd.included_reactions.photodissociation
-        fill_jacobian_photodissociation!(nd, use_yproposed)
+    if nd.included_reactions.probdecay
+        fill_jacobian_probdecay!(nd, use_yproposed)
     end
 
     if nd.jacobian isa Matrix{Float64}
