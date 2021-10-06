@@ -26,15 +26,14 @@ mutable struct ProbDecay <: AbstractReaction
 end
 
 mutable struct NeutronCapture <: AbstractReaction # Temperature Dependent Reactions
-    reactant::Vector{Vector{Int64}} # [[Z_0, N_0], [Z_1, N_1], ... [Z_n, N_n]]
-    product::Vector{Vector{Int64}}
+    reactant::Vector{Tuple{Int64, Int64}} # [(Z_0, N_0), (Z_1, N_1), ... (Z_n, N_n)]
+    product::Vector{Tuple{Int64, Int64}}
     rate::Interpolations.Extrapolation
     pfunc::Interpolations.Extrapolation
     current_rate::Float64 
     q::Union{Missing, Float64}
 end
 
-# TODO: Make every decay struct have the same structures (i.e. tuples, or vectors, or something els)
 mutable struct AlphaDecay <: AbstractReaction
     reactant::Tuple{Int64, Int64} # (Z, N)
     product::Vector{Tuple{Int64, Int64}} # [(Z_0, N_0), (Z_1, N_1)]
@@ -45,16 +44,15 @@ struct Photodissociation <: AbstractReaction
     q::Float64
 end
 
-# TODO: Replace all dicts to simple vectors
 mutable struct ReactionData
     probdecay::Vector{ProbDecay}
-    neutroncapture::Dict{Vector{Vector{Int64}},NeutronCapture}
+    neutroncapture::Dict{Int64, NeutronCapture}
     alphadecay::Vector{AlphaDecay}
 end
 
 function initialize_reactions()
     probdecay = Vector{ProbDecay}()
-    ncap_dict = Dict{Vector{Vector{Int64}},NeutronCapture}()
+    ncap_dict = Dict{Int64, NeutronCapture}()
     alphadecay = Vector{AlphaDecay}()
     return ReactionData(probdecay, ncap_dict, alphadecay)
 end

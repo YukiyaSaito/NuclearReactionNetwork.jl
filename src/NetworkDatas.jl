@@ -160,30 +160,26 @@ function fill_photodissociation_ydot!(nd::NetworkData, use_yproposed::Bool=false
             continue
         end
 
-        # Lookup partition function for the product
-        key = [[0, 1], reaction.product[1]] # [[0, 1], [Z+1, N+1]]
-        if !haskey(nd.reaction_data.neutroncapture, key) # Maybe the key should be [[Z+1, N+1], [0,1 ]]?
-            key = reverse(key)
-        end
-        if !haskey(nd.reaction_data.neutroncapture, key)
-            pfunc_r = 1.0
-        else
-            pfunc_r = nd.reaction_data.neutroncapture[key].pfunc(curr_traj.temperature)
-        end
-        pfunc_n = 2.0
-        pfunc_p = reaction.pfunc(curr_traj.temperature)
-
-        pfunc = pfunc_n * pfunc_p / pfunc_r # FIXME: What about division by zero?
-        if iszero(pfunc)
-            continue
-        end
-
         # Grab the abundace of the reactant
         z_r, n_r = reaction.product[1]
         A_r = z_r + n_r
         reactant_idx = zn_to_index(z_r, n_r, nd.net_idx)
         abundance_factor = abundance[reactant_idx]
         if iszero(abundance_factor)
+            continue
+        end
+
+        # Lookup partition function for the reactant
+        if !haskey(nd.reaction_data.neutroncapture, reactant_idx)
+            pfunc_r = 1.0
+        else
+            pfunc_r = nd.reaction_data.neutroncapture[reactant_idx].pfunc(curr_traj.temperature)
+        end
+        pfunc_n = 2.0
+        pfunc_p = reaction.pfunc(curr_traj.temperature)
+
+        pfunc = pfunc_n * pfunc_p / pfunc_r # FIXME: What about division by zero?
+        if iszero(pfunc)
             continue
         end
 
@@ -362,19 +358,15 @@ function fill_jacobian_photodissociation!(nd::NetworkData, use_yproposed::Bool=f
         # Neutron (product) index
         neutron_idx = zn_to_index(0, 1, nd.net_idx)
 
-        # Product index 
+        # Product index
         z_p, n_p = reaction.reactant[2]
         product_idx = zn_to_index(z_p, n_p, nd.net_idx)
 
         # Lookup partition function for the reactant (product of the forward reaction)
-        key = [[0, 1], reaction.product[1]] # [[0, 1], [Z+1,N+1]]
-        if !haskey(nd.reaction_data.neutroncapture, key) # Maybe the key should be [[Z+1, N+1], [0, 1]]?
-            key = reverse(key)
-        end
-        if !haskey(nd.reaction_data.neutroncapture, key)
+        if !haskey(nd.reaction_data.neutroncapture, product_idx)
             pfunc_r = 1.0
         else
-            pfunc_r = nd.reaction_data.neutroncapture[key].pfunc(curr_traj.temperature)
+            pfunc_r = nd.reaction_data.neutroncapture[product_idx].pfunc(curr_traj.temperature)
         end
         pfunc_n = 2.0
         pfunc_p = reaction.pfunc(curr_traj.temperature)

@@ -84,8 +84,8 @@ function read_boundary(path::String)
 end
 
 function read_ncap!(reaction_data::ReactionData, path::String, net_idx::NetworkIndex)
-    ncap_dict::Dict{Vector{Vector{Int64}},NeutronCapture} = load_object(path)
-    for ncap in values(ncap_dict)
+    ncaps::Vector{NeutronCapture} = load_object(path)
+    for ncap in ncaps
         # Make sure every species involved in the reaction is in the network
         out_of_network = false
         for species in [ncap.product; ncap.reactant]
@@ -100,7 +100,9 @@ function read_ncap!(reaction_data::ReactionData, path::String, net_idx::NetworkI
         end
 
         # Add the reaction to the dictionary
-        reaction_data.neutroncapture[ncap.reactant] = ncap
+        z_p, n_p = ncap.product[1]
+        reactant_idx = zn_to_index(z_p, n_p, net_idx)
+        reaction_data.neutroncapture[reactant_idx] = ncap
     end
 end
 
@@ -147,21 +149,24 @@ function read_alphadecay!(reaction_data::ReactionData, path::String, net_idx::Ne
 end
 
 function read_photodissociation!(reaction_data::ReactionData, path::String, net_idx::NetworkIndex)
-    photodissociation_dict::Dict{Vector{Vector{Int64}}, Photodissociation} = load_object(path)
-    for (products, photodissociation) in photodissociation_dict
-        key = products
-        # Make sure we have the forward rate associated with this reverse rate
-        if !haskey(reaction_data.neutroncapture, key)
-            reverse!(key) # Maybe the key is backwards?
-            if !haskey(reaction_data.neutroncapture, key)
-                continue
-            end
+    photodissociation_dict::Dict{Tuple{Int64, Int64}, Photodissociation} = load_object(path)
+    for (reactant, photodissociation) in photodissociation_dict
+        z_r, n_r = reactant
+        # Make sure the reactant is in thenetwork
+        if !zn_in_network(z_r, n_r, net_idx)
+            continue
         end
-        ncap = reaction_data.neutroncapture[key]
+        reactant_idx = zn_to_index(z_r, n_r, net_idx)
 
-        # Make sure every species involved in the reaction is in the network
+        # Make sure we have the forward rate associated with this reverse rate
+        if !haskey(reaction_data.neutroncapture, reactant_idx)
+            continue
+        end
+        ncap = reaction_data.neutroncapture[reactant_idx]
+
+        # Make sure all the products are in the network
         out_of_network = false
-        for species in [ncap.product; ncap.reactant]
+        for species in ncap.product
             z, n = species
             if !zn_in_network(z, n, net_idx)
                 out_of_network = true
