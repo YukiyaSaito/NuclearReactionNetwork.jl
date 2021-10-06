@@ -10,6 +10,7 @@ export AlphaDecay
 export Photodissociation
 export ReactionData
 export initialize_reactions
+export check_eq_reaction
 
 abstract type AbstractReaction end
 
@@ -40,7 +41,12 @@ mutable struct AlphaDecay <: AbstractReaction
     rate::Float64
 end
 
-struct Photodissociation <: AbstractReaction
+# TODO: Should this be == instead?
+function check_eq_reaction(lhs::AbstractReaction, rhs::AbstractReaction)
+    return (typeof(lhs) == typeof(rhs)) && (lhs.reactant == rhs.reactant) && (lhs.product == rhs.product)
+end
+
+struct Photodissociation
     q::Float64
 end
 

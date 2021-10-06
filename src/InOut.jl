@@ -122,8 +122,15 @@ function read_probdecay!(reaction_data::ReactionData, path::String, net_idx::Net
             continue
         end
 
-        # Add the reaction to the dictionary
-        push!(reaction_data.probdecay, decay)
+        # Check if we already have this reaction in the network
+        idx = findfirst(other -> check_eq_reaction(decay, other), reaction_data.probdecay)
+        if !isnothing(idx)
+            # Replace the old data
+            reaction_data.probdecay[idx] = decay
+        else
+            # Add the reaction to the array
+            push!(reaction_data.probdecay, decay)
+        end
     end
 end
 
@@ -143,8 +150,15 @@ function read_alphadecay!(reaction_data::ReactionData, path::String, net_idx::Ne
             continue
         end
 
-        # Add the reaction to the vector
-        push!(reaction_data.alphadecay, decay)
+        # Check if we already have this reaction in the network
+        idx = findfirst(other -> check_eq_reaction(decay, other), reaction_data.alphadecay)
+        if !isnothing(idx)
+            # Replace the old data
+            reaction_data.prodecay[idx] = decay
+        else
+            # Add the reaction to the array
+            push!(reaction_data.alphadecay, decay)
+        end
     end
 end
 
