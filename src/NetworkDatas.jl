@@ -224,20 +224,6 @@ function update_ydot!(nd::NetworkData; use_yproposed::Bool=false)
     end
 end
 
-function fill_initial_abundance!(abundance_index::Matrix{Int64}, abundance_vector::Vector{Float64}, abundance::Vector{Float64}, net_idx::NetworkIndex)
-    for i in 1:size(abundance_index)[1]
-        z, A = abundance_index[i, :]
-        n = A - z
-        neutron_subtract = 0
-        while !zn_in_network(z, n - neutron_subtract, net_idx)
-            neutron_subtract += 1
-        end
-        idx = zn_to_index(z, n, net_idx)
-        abundance[idx] += abundance_vector[i]/A # TODO: Souldn't this be abundance_vector[idx]/(z+(n-neutron_subtract))
-    end        
-    return abundance
-end
-
 function fill_jacobian_probdecay!(nd::NetworkData, use_yproposed::Bool=false)
     abundance = nd.abundance
     if use_yproposed
