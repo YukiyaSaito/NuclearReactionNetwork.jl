@@ -105,8 +105,8 @@ function read_ncap!(reaction_data::ReactionData, path::String, net_idx::NetworkI
 end
 
 function read_probdecay!(reaction_data::ReactionData, path::String, net_idx::NetworkIndex)
-    probdecay_dict::Dict{Vector{Vector{Int64}}, ProbDecay} = load_object(path)
-    for decay in values(probdecay_dict)
+    probdecay::Vector{ProbDecay} = load_object(path)
+    for decay in probdecay
         # Make sure every species involved in the reaction is in the network
         out_of_network = false
         for species in [decay.product; decay.reactant]
@@ -121,7 +121,7 @@ function read_probdecay!(reaction_data::ReactionData, path::String, net_idx::Net
         end
 
         # Add the reaction to the dictionary
-        reaction_data.probdecay[decay.reactant] = decay
+        push!(reaction_data.probdecay, decay)
     end
 end
 

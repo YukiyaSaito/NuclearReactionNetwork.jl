@@ -52,7 +52,7 @@ function fill_probdecay_ydot!(nd::NetworkData, use_yproposed::Bool=false)
         abundance = nd.yproposed
     end
 
-    for decay in values(nd.reaction_data.probdecay)
+    for decay in nd.reaction_data.probdecay
         z_r, n_r = decay.reactant[1]
         reactant_idx = zn_to_index(z_r, n_r, nd.net_idx)
 
@@ -62,10 +62,10 @@ function fill_probdecay_ydot!(nd::NetworkData, use_yproposed::Bool=false)
 
         nd.ydot[reactant_idx] += -1.0 * decay.rate * abundance[reactant_idx]
 
-        for i in 1:size(decay.product, 1)
-            z_p, n_p = decay.product[i]
+        for (product, average_number) in zip(decay.product, decay.average_number)
+            z_p, n_p = product
             product_idx = zn_to_index(z_p, n_p, nd.net_idx)
-            nd.ydot[product_idx] += decay.average_number[i] * decay.rate * abundance[reactant_idx]
+            nd.ydot[product_idx] += average_number * decay.rate * abundance[reactant_idx]
         end
     end
 end
@@ -248,15 +248,19 @@ function fill_jacobian_probdecay!(nd::NetworkData, use_yproposed::Bool=false)
         abundance = nd.yproposed
     end
 
-    for decay in values(nd.reaction_data.probdecay)
+    for decay in nd.reaction_data.probdecay
+        if iszero(decay.rate)
+            continue
+        end
+
         z_r, n_r = decay.reactant[1]
         reactant_idx = zn_to_index(z_r, n_r, nd.net_idx)
         nd.jacobian[reactant_idx, reactant_idx] += -1.0 * decay.rate
 
-        for i in 1:size(decay.product)[1]
-            z_p, n_p = decay.product[i]
+        for (product, average_number) in zip(decay.product, decay.average_number)
+            z_p, n_p = product
             product_idx = zn_to_index(z_p, n_p, nd.net_idx)
-            nd.jacobian[product_idx, reactant_idx] += decay.average_number[i] * decay.rate
+            nd.jacobian[product_idx, reactant_idx] += average_number * decay.rate
         end
     end
 end

@@ -19,8 +19,8 @@ abstract type AbstractReaction end
 # end
 
 mutable struct ProbDecay <: AbstractReaction
-    reactant::Vector{Vector{Int64}} #[[Z_0, N_0], [Z_1, N_1], ... [Z_n, N_n]]
-    product::Vector{Vector{Int64}}
+    reactant::Vector{Tuple{Int64, Int64}} # [(Z_0, N_0), (Z_1, N_1), ... (Z_n, N_n)]
+    product::Vector{Tuple{Int64, Int64}}
     rate::Float64
     average_number::Vector{Float64}
 end
@@ -47,16 +47,16 @@ end
 
 # TODO: Replace all dicts to simple vectors
 mutable struct ReactionData
-    probdecay::Dict{Vector{Vector{Int64}},ProbDecay}
+    probdecay::Vector{ProbDecay}
     neutroncapture::Dict{Vector{Vector{Int64}},NeutronCapture}
     alphadecay::Vector{AlphaDecay}
 end
 
 function initialize_reactions()
-    probdecay_dict = Dict{Vector{Vector{Int64}},ProbDecay}()
+    probdecay = Vector{ProbDecay}()
     ncap_dict = Dict{Vector{Vector{Int64}},NeutronCapture}()
     alphadecay = Vector{AlphaDecay}()
-    return ReactionData(probdecay_dict, ncap_dict, alphadecay)
+    return ReactionData(probdecay, ncap_dict, alphadecay)
 end
 
 end

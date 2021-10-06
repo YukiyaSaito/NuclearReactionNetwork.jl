@@ -57,7 +57,7 @@ end
 
 function read_probdecay(path::String) 
     # Read Fortran formatted PRISM input file for probabilistic decay.
-    probdecay_dict = Dict{Vector{Vector{Int64}}, NRN.ProbDecay}()
+    probdecay = Vector{NRN.ProbDecay}()
     open(path) do file
         lines = readlines(file)
         num_entry::Int64 = parse(Int64, lines[1])
@@ -69,15 +69,13 @@ function read_probdecay(path::String)
             rate::Float64 = parse(Float64, lines[6*(i-1)+6])
             average_number::Vector{Float64} = [parse(Float64, s) for s in split(lines[6*(i-1)+7])]
 
-            reactants = [collect(zn) for zn in zip(z_rs, n_rs)]
-            products = [collect(zn) for zn in zip(z_ps, n_ps)]
+            reactants = collect(zip(z_rs, n_rs))
+            products = collect(zip(z_ps, n_ps))
 
-            println("$(reactants), $(rate)")
-
-            probdecay_dict[reactants] = NRN.ProbDecay(reactants, products, rate, average_number)
+            push!(probdecay, NRN.ProbDecay(reactants, products, rate, average_number))
         end
     end
-    return probdecay_dict
+    return probdecay
 end
 
 function read_alphadecay(path::String)
