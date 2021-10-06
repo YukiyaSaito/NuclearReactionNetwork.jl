@@ -27,7 +27,7 @@ end
 
 function read_ncap(path::String) 
     # Read Fortran formatted input file for temperature dependent reaction rate. 
-    ncaps = Vector{NRN.NeutronCapture}()
+    ncap_dict = Dict{Vector{Vector{Int64}}, NRN.NeutronCapture}()
     open(path) do file
         lines = readlines(file)
         num_entry::Int64 = parse(Int64, lines[1])
@@ -42,17 +42,17 @@ function read_ncap(path::String)
                 rates = [parse(Float64, s) for s in split(lines[6*(i-1)+8])]
                 pfuncs = [parse(Float64, s) for s in split(lines[6*(i-1)+9])]
 
-                reactants = collect(zip(z_rs, n_rs))
-                products = collect(zip(z_ps, n_ps))
+                reactants = [collect(zn) for zn in zip(z_rs, n_rs)]
+                products = [collect(zn) for zn in zip(z_ps, n_ps)]
 
                 rates_lerp = LinearInterpolation(temperature, rates, extrapolation_bc=Flat())
                 pfuncs_lerp = LinearInterpolation(temperature, pfuncs, extrapolation_bc=Flat())
 
-                push!(ncaps, NRN.NeutronCapture(reactants, products, rates_lerp, pfuncs_lerp, 0.0, missing))
+                ncap_dict[reactants] = NRN.NeutronCapture(reactants, products, rates_lerp, pfuncs_lerp, 0.0, missing)
             end
         end
     end
-    return ncaps
+    return ncap_dict
 end
 
 function read_probdecay(path::String) 
@@ -102,18 +102,18 @@ end
 
 function read_photodissociation(path::String)
     # Read the reverse reaction file
-    photodissociation_dict = Dict{Tuple{Int64, Int64}, NRN.Photodissociation}()
+    photodissociation_dict = Dict{Vector{Vector{Int64}}, NRN.Photodissociation}()
     open(path) do file
         lines = readlines(file)
         num_entries::Int64 = parse(Int, lines[1])
         for i in 1:num_entries
-            z_r = parse(Int64, lines[5*(i-1) + 2])
-            n_r = parse(Int64, lines[5*(i-1) + 3])
+            z_ps = [parse(Int64, s) for s in split(lines[5*(i-1) + 4])]
+            n_ps = [parse(Int64, s) for s in split(lines[5*(i-1) + 5])]
             q = parse(Float64, lines[5*(i-1) + 6])
 
-            reactant = (z_r, n_r)
+            products = [collect(p) for p in zip(z_ps, n_ps)]
 
-            photodissociation_dict[reactant] = NRN.Photodissociation(q)
+            photodissociation_dict[products] = NRN.Photodissociation(q)
         end
     end
     return photodissociation_dict
