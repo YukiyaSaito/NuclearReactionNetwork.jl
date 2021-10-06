@@ -28,7 +28,7 @@ function read_test(path::String)
     BLAS.set_num_threads(4)
 
     println("Loading data...")
-    nd = NetworkData(path)
+    nd = initialize_network_data(path)
     try
         println("Solving network...")
         SolveNetwork!(nd)

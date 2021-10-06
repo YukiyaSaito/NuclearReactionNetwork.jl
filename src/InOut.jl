@@ -12,9 +12,9 @@ using ..Network
 using ..NetworkDatas
 
 export Result
-export NetworkData
 export dump_result
 export dump_iteration
+export initialize_network_data
 
 # TODO: Should this be a matrix rather than a series of vectors of the same size (we would lose type inhomogeneity)?
 struct Result
@@ -229,7 +229,7 @@ function read_initial_abundance(path::String, net_idx::NetworkIndex)
     return abundance
 end
 
-function NetworkData(path::String)
+function initialize_network_data(path::String)
     # Parse the JSON control file
     println("Parsing JSON...")
     j = JSON.parsefile(path, dicttype=DataStructures.OrderedDict)
