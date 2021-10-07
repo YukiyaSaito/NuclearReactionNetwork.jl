@@ -42,9 +42,8 @@ struct NetworkData
 end
 
 function initialize_ydot!(nd::NetworkData)
-    lmul!(0, nd.ydot)    
+    fill!(nd.ydot, 0.0)
 end
-
 
 function fill_probdecay_ydot!(nd::NetworkData, use_yproposed::Bool=false)
     abundance = nd.abundance
