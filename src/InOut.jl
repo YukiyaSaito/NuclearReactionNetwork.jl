@@ -101,8 +101,8 @@ function read_ncap!(reaction_data::ReactionData, path::String, net_idx::NetworkI
 
         # Add the reaction to the dictionary
         z_p, n_p = ncap.product[1]
-        reactant_idx = zn_to_index(z_p, n_p, net_idx)
-        reaction_data.neutroncapture[reactant_idx] = ncap
+        product_idx = zn_to_index(z_p, n_p, net_idx)
+        reaction_data.neutroncapture[product_idx] = ncap
     end
 end
 
