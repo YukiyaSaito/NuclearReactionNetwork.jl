@@ -349,10 +349,10 @@ function fill_jacobian_photodissociation!(nd::NetworkData, use_yproposed::Bool=f
         product_idx = zn_to_index(z_p, n_p, nd.net_idx)
 
         # Lookup partition function for the reactant (product of the forward reaction)
-        if !haskey(nd.reaction_data.neutroncapture, product_idx)
+        if !haskey(nd.reaction_data.neutroncapture, reactant_idx)
             pfunc_r = 1.0
         else
-            pfunc_r = nd.reaction_data.neutroncapture[product_idx].pfunc(curr_traj.temperature)
+            pfunc_r = nd.reaction_data.neutroncapture[reactant_idx].pfunc(curr_traj.temperature)
         end
         pfunc_n = 2.0
         pfunc_p = reaction.pfunc(curr_traj.temperature)
