@@ -166,7 +166,7 @@ function read_photodissociation!(reaction_data::ReactionData, path::String, net_
     photodissociation_dict::Dict{Tuple{Int64, Int64}, Photodissociation} = load_object(path)
     for (reactant, photodissociation) in photodissociation_dict
         z_r, n_r = reactant
-        # Make sure the reactant is in thenetwork
+        # Make sure the reactant is in the network
         if !zn_in_network(z_r, n_r, net_idx)
             continue
         end
@@ -177,19 +177,6 @@ function read_photodissociation!(reaction_data::ReactionData, path::String, net_
             continue
         end
         ncap = reaction_data.neutroncapture[reactant_idx]
-
-        # Make sure all the products are in the network
-        out_of_network = false
-        for species in ncap.product
-            z, n = species
-            if !zn_in_network(z, n, net_idx)
-                out_of_network = true
-                break
-            end
-        end
-        if out_of_network
-            continue
-        end
 
         # Add the q value to the neutroncapture
         ncap.q = photodissociation.q
