@@ -15,7 +15,7 @@ struct Trajectory
     end
 end
 
-mutable struct CurrentTrajectory
+struct CurrentTrajectory
     temperature::Float64
     density::Float64
     function CurrentTrajectory(temperature::Float64, density::Float64)
