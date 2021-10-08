@@ -18,23 +18,23 @@ export initialize_network_data
 
 # TODO: Should this be a matrix rather than a series of vectors of the same size (we would lose type inhomogeneity)?
 struct Result
-    proton_nums::Vector{Int64}
-    neutron_nums::Vector{Int64}
+    proton_nums::Vector{Int}
+    neutron_nums::Vector{Int}
     abundance::Vector{Float64} # TODO: Add more things that we can output, like PRISM does
-    function Result(proton_nums::Vector{Int64}, neutron_nums::Vector{Int64}, abundance::Vector{Float64})
+    function Result(proton_nums::Vector{Int}, neutron_nums::Vector{Int}, abundance::Vector{Float64})
         return new(proton_nums, neutron_nums, abundance)
     end
 end
 
 function Result(nd::NetworkData)::Result
-    boundary::Matrix{Int64} = nd.net_idx.networkboundary.matrix
+    boundary::Matrix{Int} = nd.net_idx.networkboundary.matrix
 
-    zs::Vector{Int64} = zeros(Int64, length(nd.abundance))
-    ns::Vector{Int64} = zeros(Int64, length(nd.abundance))
+    zs::Vector{Int} = zeros(Int, length(nd.abundance))
+    ns::Vector{Int} = zeros(Int, length(nd.abundance))
 
-    index::Int64 = 1
-    for (z::Int64, n_low::Int64, n_high::Int64) in eachrow(boundary)
-        dn::Int64 = n_high - n_low
+    index::Int = 1
+    for (z::Int, n_low::Int, n_high::Int) in eachrow(boundary)
+        dn::Int = n_high - n_low
         zs[index:index+dn] = repeat([z], dn+1)
         ns[index:index+dn] = range(n_low, n_high, length=dn+1)
         index += dn + 1
@@ -49,16 +49,16 @@ function dump_result(nd::NetworkData)::Nothing
 
     result::Result = Result(nd)
     open(nd.output_info.final_output_path, "w") do out_file
-        # TODO: This should really write [Int64 Int64 Float64], but right now it gets promoted to [Float64 Float64 Float64]
+        # TODO: This should really write [Int Int Float64], but right now it gets promoted to [Float64 Float64 Float64]
         idxs::BitVector = .!iszero.(result.abundance)
-        Zs::Vector{Int64} = result.proton_nums[idxs]
-        As::Vector{Int64} = Zs .+ result.neutron_nums[idxs]
+        Zs::Vector{Int} = result.proton_nums[idxs]
+        As::Vector{Int} = Zs .+ result.neutron_nums[idxs]
         ys::Vector{Float64} = result.abundance[idxs]
         writedlm(out_file, [Zs As ys])
     end
 end
 
-function dump_iteration(nd::NetworkData, iteration::Int64)::Nothing
+function dump_iteration(nd::NetworkData, iteration::Int)::Nothing
     if !nd.output_info.dump_each_iteration
         return
     end
@@ -69,9 +69,9 @@ function dump_iteration(nd::NetworkData, iteration::Int64)::Nothing
     open(nd.output_info.iteration_output_path, mode) do out_file
         write(out_file, "$(iteration)\t$(nd.time.current)\t$(curr_traj.temperature)\t$(curr_traj.density)\n")
         idxs::BitVector = .!iszero.(result.abundance)
-        Zs::Vecotr{Int64} = result.proton_nums[idxs]
-        As::Vector{Int64} = Zs .+ result.neutron_nums[idxs]
-        ys::Vector{Int64} = result.abundance[idxs]
+        Zs::Vecotr{Int} = result.proton_nums[idxs]
+        As::Vector{Int} = Zs .+ result.neutron_nums[idxs]
+        ys::Vector{Int} = result.abundance[idxs]
         writedlm(out_file, [Zs As ys])
         write(out_file, "\n")
     end
@@ -79,7 +79,7 @@ end
 
 function read_boundary(path::String)::Nothing
     # Read Fortran formatted extent file. It determines the limit on the nuclear chart.
-    raw_boundary::Matrix{Int64} = readdlm(path, ' ', Int64)
+    raw_boundary::Matrix{Int} = readdlm(path, ' ', Int)
     fill_boundary(raw_boundary)
 end
 
@@ -88,8 +88,8 @@ function read_ncap!(reaction_data::ReactionData, path::String, net_idx::NetworkI
     for ncap::NeutronCapture in ncaps
         # Make sure every species involved in the reaction is in the network
         out_of_network::Bool = false
-        for species::Tuple{Int64, Int64} in [ncap.product; ncap.reactant]
-            z::Int64, n::Int64 = species
+        for species::Tuple{Int, Int} in [ncap.product; ncap.reactant]
+            z::Int, n::Int = species
             if !zn_in_network(z, n, net_idx)
                 out_of_network = true
                 break
@@ -100,8 +100,8 @@ function read_ncap!(reaction_data::ReactionData, path::String, net_idx::NetworkI
         end
 
         # Add the reaction to the dictionary
-        z_p::Int64, n_p::Int64 = ncap.product[1]
-        product_idx::Int64 = zn_to_index(z_p, n_p, net_idx)
+        z_p::Int, n_p::Int = ncap.product[1]
+        product_idx::Int = zn_to_index(z_p, n_p, net_idx)
         reaction_data.neutroncapture[product_idx] = ncap
     end
 end
@@ -111,8 +111,8 @@ function read_probdecay!(reaction_data::ReactionData, path::String, net_idx::Net
     for decay::ProbDecay in probdecay
         # Make sure every species involved in the reaction is in the network
         out_of_network::Bool = false
-        for species::Tuple{Int64, Int64} in [decay.product; decay.reactant]
-            z::Int64, n::Int64 = species
+        for species::Tuple{Int, Int} in [decay.product; decay.reactant]
+            z::Int, n::Int = species
             if !zn_in_network(z, n, net_idx)
                 out_of_network = true
                 break
@@ -123,7 +123,7 @@ function read_probdecay!(reaction_data::ReactionData, path::String, net_idx::Net
         end
 
         # Check if we already have this reaction in the network
-        idx::Union{Nothing, Int64} = findfirst(other -> check_eq_reaction(decay, other), reaction_data.probdecay)
+        idx::Union{Nothing, Int} = findfirst(other -> check_eq_reaction(decay, other), reaction_data.probdecay)
         if !isnothing(idx)
             # Replace the old data
             reaction_data.probdecay[idx] = decay
@@ -139,8 +139,8 @@ function read_alphadecay!(reaction_data::ReactionData, path::String, net_idx::Ne
     for decay::AlphaDecay in alphadecay
         # Make sure every species involved in the reaction is in the network
         out_of_network::Bool = false
-        for species::Tuple{Int64, Int64} in [decay.product; decay.reactant]
-            z::Int64, n::Int64 = species
+        for species::Tuple{Int, Int} in [decay.product; decay.reactant]
+            z::Int, n::Int = species
             if !zn_in_network(z, n, net_idx)
                 out_of_network = true
                 break
@@ -151,7 +151,7 @@ function read_alphadecay!(reaction_data::ReactionData, path::String, net_idx::Ne
         end
 
         # Check if we already have this reaction in the network
-        idx::Union{Nothing, Int64} = findfirst(other -> check_eq_reaction(decay, other), reaction_data.alphadecay)
+        idx::Union{Nothing, Int} = findfirst(other -> check_eq_reaction(decay, other), reaction_data.alphadecay)
         if !isnothing(idx)
             # Replace the old data
             reaction_data.prodecay[idx] = decay
@@ -163,14 +163,14 @@ function read_alphadecay!(reaction_data::ReactionData, path::String, net_idx::Ne
 end
 
 function read_photodissociation!(reaction_data::ReactionData, path::String, net_idx::NetworkIndex)::Nothing
-    photodissociation_dict::Dict{Tuple{Int64, Int64}, Photodissociation} = load_object(path)
-    for (reactant::Tuple{Int64, Int64}, photodissociation::Photodissociation) in photodissociation_dict
-        z_r::Int64, n_r::Int64 = reactant
+    photodissociation_dict::Dict{Tuple{Int, Int}, Photodissociation} = load_object(path)
+    for (reactant::Tuple{Int, Int}, photodissociation::Photodissociation) in photodissociation_dict
+        z_r::Int, n_r::Int = reactant
         # Make sure the reactant is in the network
         if !zn_in_network(z_r, n_r, net_idx)
             continue
         end
-        reactant_idx::Int64 = zn_to_index(z_r, n_r, net_idx)
+        reactant_idx::Int = zn_to_index(z_r, n_r, net_idx)
 
         # Make sure we have the forward rate associated with this reverse rate
         if !haskey(reaction_data.neutroncapture, reactant_idx)
@@ -209,16 +209,16 @@ function read_dataset!(reaction_data::ReactionData, included_reactions::Included
 end
 
 function read_initial_abundance(path::String, net_idx::NetworkIndex)::Vector{Float64}
-    data::Vector{Tuple{Int64, Int64, Float64}} = load_object(path)
+    data::Vector{Tuple{Int, Int, Float64}} = load_object(path)
     total::Float64 = sum(zay->zay[3], data)
     data = [(z, a, y/total) for (z, a, y) in data]
     abundance::Vector{Float64} = zeros(Float64, get_networksize(net_idx))
-    for (z::Int64, a::Int64, y::Float64) in data
-        n::Int64 = a - z
+    for (z::Int, a::Int, y::Float64) in data
+        n::Int = a - z
         while !zn_in_network(z, n, net_idx)
             n -= 1
         end
-        idx::Int64 = zn_to_index(z, n, net_idx)
+        idx::Int = zn_to_index(z, n, net_idx)
         abundance[idx] += y/(z+n)
     end
     return abundance
@@ -250,7 +250,7 @@ function initialize_network_data(path::String)
     yproposed::Vector{Float64} = Vector{Float64}(undef, length(abundance))
 
     # The size of the network
-    networksize::Int64 = get_networksize(net_idx)
+    networksize::Int = get_networksize(net_idx)
 
     # Get the time
     println("Reading time data...")
@@ -274,7 +274,7 @@ function initialize_network_data(path::String)
 
     # Create the Jacobian
     println("Creating the Jacobian...")
-    jacobian::SparseMatrixCSC{Float64, Int64} = spzeros(Float64, Int64, (networksize, networksize))
+    jacobian::SparseMatrixCSC{Float64, Int} = spzeros(Float64, Int, (networksize, networksize))
 
     # Grab the output info
     println("Reading the output information...")

@@ -36,7 +36,7 @@ struct NetworkData
     yproposed::Vector{Float64}
     ydot::Vector{Float64}
     time::Time
-    jacobian::SparseMatrixCSC{Float64, Int64}
+    jacobian::SparseMatrixCSC{Float64, Int}
     output_info::OutputInfo
     included_reactions::IncludedReactions
 end
@@ -52,8 +52,8 @@ function fill_probdecay_ydot!(nd::NetworkData, use_yproposed::Bool=false)::Nothi
     end
 
     for decay::ProbDecay in nd.reaction_data.probdecay
-        z_r::Int64, n_r::Int64 = decay.reactant[1]
-        reactant_idx::Int64 = zn_to_index(z_r, n_r, nd.net_idx)
+        z_r::Int, n_r::Int = decay.reactant[1]
+        reactant_idx::Int = zn_to_index(z_r, n_r, nd.net_idx)
 
         if iszero(decay.rate) || iszero(abundance[reactant_idx])
             continue
@@ -61,9 +61,9 @@ function fill_probdecay_ydot!(nd::NetworkData, use_yproposed::Bool=false)::Nothi
 
         nd.ydot[reactant_idx] += -1.0 * decay.rate * abundance[reactant_idx]
 
-        for (product::Tuple{Int64, Int64}, average_number::Float64) in zip(decay.product, decay.average_number)
-            z_p::Int64, n_p::Int64 = product
-            product_idx::Int64 = zn_to_index(z_p, n_p, nd.net_idx)
+        for (product::Tuple{Int, Int}, average_number::Float64) in zip(decay.product, decay.average_number)
+            z_p::Int, n_p::Int = product
+            product_idx::Int = zn_to_index(z_p, n_p, nd.net_idx)
             nd.ydot[product_idx] += average_number * decay.rate * abundance[reactant_idx]
         end
     end
@@ -84,9 +84,9 @@ function fill_neutroncapture_ydot!(nd::NetworkData, use_yproposed::Bool=false)::
 
         # Grab the product of all the abundances
         abundance_factor::Float64 = 1.0
-        for reactant::Tuple{Int64, Int64} in capture.reactant
-            z_r::Int64, n_r::Int64 = reactant
-            reactant_idx::Int64 = zn_to_index(z_r, n_r, nd.net_idx)
+        for reactant::Tuple{Int, Int} in capture.reactant
+            z_r::Int, n_r::Int = reactant
+            reactant_idx::Int = zn_to_index(z_r, n_r, nd.net_idx)
             abundance_factor *= abundance[reactant_idx]
         end
         if iszero(abundance_factor)
@@ -94,16 +94,16 @@ function fill_neutroncapture_ydot!(nd::NetworkData, use_yproposed::Bool=false)::
         end
 
         # Update ydot for the reactants
-        for reactant::Tuple{Int64, Int64} in capture.reactant
-            z_r::Int64, n_r::Int64 = reactant
-            reactant_idx::Int64 = zn_to_index(z_r, n_r, nd.net_idx)
+        for reactant::Tuple{Int, Int} in capture.reactant
+            z_r::Int, n_r::Int = reactant
+            reactant_idx::Int = zn_to_index(z_r, n_r, nd.net_idx)
             nd.ydot[reactant_idx] += -1.0 * curr_traj.density * rate * abundance_factor
         end
 
         # Update ydot for the products
-        for product::Tuple{Int64, Int64} in capture.product
-            z_p::Int64, n_p::Int64 = product
-            product_idx::Int64 = zn_to_index(z_p, n_p, nd.net_idx)
+        for product::Tuple{Int, Int} in capture.product
+            z_p::Int, n_p::Int = product
+            product_idx::Int = zn_to_index(z_p, n_p, nd.net_idx)
             nd.ydot[product_idx] += rate * curr_traj.density * abundance_factor
         end
     end
@@ -122,8 +122,8 @@ function fill_alphadecay_ydot!(nd::NetworkData, use_yproposed::Bool=false)::Noth
         end
 
         # Grab the abundace of the reactant
-        z_r::Int64, n_r::Int64 = decay.reactant
-        reactant_idx::Int64 = zn_to_index(z_r, n_r, nd.net_idx)
+        z_r::Int, n_r::Int = decay.reactant
+        reactant_idx::Int = zn_to_index(z_r, n_r, nd.net_idx)
         abundance_factor::Float64 = abundance[reactant_idx]
         if iszero(abundance_factor)
             continue
@@ -133,9 +133,9 @@ function fill_alphadecay_ydot!(nd::NetworkData, use_yproposed::Bool=false)::Noth
         nd.ydot[reactant_idx] += -1.0 * rate * abundance_factor
 
         # Update ydot for the products
-        for product::Tuple{Int64, Int64} in decay.product
-            z_p::Int64, n_p::Int64 = product
-            product_idx::Int64 = zn_to_index(z_p, n_p, nd.net_idx)
+        for product::Tuple{Int, Int} in decay.product
+            z_p::Int, n_p::Int = product
+            product_idx::Int = zn_to_index(z_p, n_p, nd.net_idx)
             nd.ydot[product_idx] += 1.0 * rate * abundance_factor
         end
     end
@@ -160,9 +160,9 @@ function fill_photodissociation_ydot!(nd::NetworkData, use_yproposed::Bool=false
         end
 
         # Grab the abundace of the reactant
-        z_r::Int64, n_r::Int64 = reaction.product[1]
-        A_r::Int64 = z_r + n_r
-        reactant_idx::Int64 = zn_to_index(z_r, n_r, nd.net_idx)
+        z_r::Int, n_r::Int = reaction.product[1]
+        A_r::Int = z_r + n_r
+        reactant_idx::Int = zn_to_index(z_r, n_r, nd.net_idx)
         abundance_factor::Float64 = abundance[reactant_idx]
         if iszero(abundance_factor)
             continue
@@ -183,12 +183,12 @@ function fill_photodissociation_ydot!(nd::NetworkData, use_yproposed::Bool=false
         end
 
         # Compute the rate of the reaction
-        A_p::Int64 = 0
-        for product::Tuple{Int64, Int64} in reaction.reactant
-            z_p::Int64, n_p::Int64 = product
+        A_p::Int = 0
+        for product::Tuple{Int, Int} in reaction.reactant
+            z_p::Int, n_p::Int = product
             A_p += z_p + n_p
         end
-        A_n::Int64 = 1
+        A_n::Int = 1
         if q < 0
             reverse_rate::Float64 = 1e16
         else
@@ -199,9 +199,9 @@ function fill_photodissociation_ydot!(nd::NetworkData, use_yproposed::Bool=false
         nd.ydot[reactant_idx] += -1.0 * reverse_rate * abundance_factor
 
         # Update ydot for the products
-        for product::Tuple{Int64, Int64} in reaction.reactant
-            z_p::Int64, n_p::Int64 = product
-            product_idx::Int64 = zn_to_index(z_p, n_p, nd.net_idx)
+        for product::Tuple{Int, Int} in reaction.reactant
+            z_p::Int, n_p::Int = product
+            product_idx::Int = zn_to_index(z_p, n_p, nd.net_idx)
             nd.ydot[product_idx] += 1.0 * reverse_rate * abundance_factor
         end
     end
@@ -234,13 +234,13 @@ function fill_jacobian_probdecay!(nd::NetworkData, use_yproposed::Bool=false)::N
             continue
         end
 
-        z_r::Int64, n_r::Int64 = decay.reactant[1]
-        reactant_idx::Int64 = zn_to_index(z_r, n_r, nd.net_idx)
+        z_r::Int, n_r::Int = decay.reactant[1]
+        reactant_idx::Int = zn_to_index(z_r, n_r, nd.net_idx)
         nd.jacobian[reactant_idx, reactant_idx] += -1.0 * decay.rate
 
-        for (product::Tuple{Int64, Int64}, average_number::Float64) in zip(decay.product, decay.average_number)
-            z_p::Int64, n_p::Int64 = product
-            product_idx::Int64 = zn_to_index(z_p, n_p, nd.net_idx)
+        for (product::Tuple{Int, Int}, average_number::Float64) in zip(decay.product, decay.average_number)
+            z_p::Int, n_p::Int = product
+            product_idx::Int = zn_to_index(z_p, n_p, nd.net_idx)
             nd.jacobian[product_idx, reactant_idx] += average_number * decay.rate
         end
     end
@@ -265,19 +265,19 @@ function fill_jacobian_neutroncapture!(nd::NetworkData, use_yproposed::Bool=fals
         end
 
         # Neutron index and abundance
-        neutron_idx::Int64 = zn_to_index(0, 1, nd.net_idx)
+        neutron_idx::Int = zn_to_index(Int(0), Int(1), nd.net_idx)
         neutron_abundance::Float64 = abundance[neutron_idx]
 
         # Reactant index and abundance
-        reactant::Tuple{Int64, Int64} = capture.reactant[2]
-        z_r::Int64, n_r::Int64 = reactant
-        reactant_idx::Int64 = zn_to_index(z_r, n_r, nd.net_idx)
+        reactant::Tuple{Int, Int} = capture.reactant[2]
+        z_r::Int, n_r::Int = reactant
+        reactant_idx::Int = zn_to_index(z_r, n_r, nd.net_idx)
         reactant_abundance::Float64 = abundance[reactant_idx]
 
         # Product index
-        product::Tuple{Int64, Int64} = capture.product[1]
-        z_p::Int64, n_p::Int64 = product
-        product_idx::Int64 = zn_to_index(z_p, n_p, nd.net_idx)
+        product::Tuple{Int, Int} = capture.product[1]
+        z_p::Int, n_p::Int = product
+        product_idx::Int = zn_to_index(z_p, n_p, nd.net_idx)
 
         # Double counting factor TODO: Is this always 1.0?
         dc_factor::Float64 = reactant_idx == product_idx ? 0.5 : 1.0
@@ -301,13 +301,13 @@ function fill_jacobian_alphadecay!(nd::NetworkData, use_yproposed::Bool=false)::
     end
 
     for decay::AlphaDecay in nd.reaction_data.alphadecay
-        z_r::Int64, n_r::Int64 = decay.reactant
-        reactant_idx::Int64 = zn_to_index(z_r, n_r, nd.net_idx)
+        z_r::Int, n_r::Int = decay.reactant
+        reactant_idx::Int = zn_to_index(z_r, n_r, nd.net_idx)
         nd.jacobian[reactant_idx, reactant_idx] += -1.0 * decay.rate
 
-        for product::Tuple{Int64, Int64} in decay.product
-            z_p::Int64, n_p::Int64 = product
-            product_idx::Int64 = zn_to_index(z_p, n_p, nd.net_idx)
+        for product::Tuple{Int, Int} in decay.product
+            z_p::Int, n_p::Int = product
+            product_idx::Int = zn_to_index(z_p, n_p, nd.net_idx)
             nd.jacobian[product_idx, reactant_idx] += decay.rate
         end
     end
@@ -337,15 +337,15 @@ function fill_jacobian_photodissociation!(nd::NetworkData, use_yproposed::Bool=f
         end
 
         # Reactant index
-        z_r::Int64, n_r::Int64 = reaction.product[1]
-        reactant_idx::Int64 = zn_to_index(z_r, n_r, nd.net_idx)
+        z_r::Int, n_r::Int = reaction.product[1]
+        reactant_idx::Int = zn_to_index(z_r, n_r, nd.net_idx)
 
         # Neutron (product) index
-        neutron_idx::Int64 = zn_to_index(0, 1, nd.net_idx)
+        neutron_idx::Int = zn_to_index(Int(0), Int(1), nd.net_idx)
 
         # Product index
-        z_p::Int64, n_p::Int64 = reaction.reactant[2]
-        product_idx::Int64 = zn_to_index(z_p, n_p, nd.net_idx)
+        z_p::Int, n_p::Int = reaction.reactant[2]
+        product_idx::Int = zn_to_index(z_p, n_p, nd.net_idx)
 
         # Lookup partition function for the reactant (product of the forward reaction)
         if !haskey(nd.reaction_data.neutroncapture, reactant_idx)
@@ -361,9 +361,9 @@ function fill_jacobian_photodissociation!(nd::NetworkData, use_yproposed::Bool=f
             continue
         end
 
-        A_n::Int64 = 1
-        A_p::Int64 = 0 + 1 + z_p + n_p
-        A_r::Int64 = z_r + n_r
+        A_n::Int = 1
+        A_p::Int = 0 + 1 + z_p + n_p
+        A_r::Int = z_r + n_r
 
         # Reverse rate
         if q < 0

@@ -40,15 +40,15 @@ function lu_dot!(F::UmfpackLU, S::SparseMatrixCSC{<:UMFVTypes,<:UMFITypes}; chec
     return F
 end
 
-function newton_raphson_iteration!(nd::NetworkData, Δy::Vector{Float64})::Int64
+function newton_raphson_iteration!(nd::NetworkData, Δy::Vector{Float64})::Int
     nd.yproposed .= nd.abundance
     # lu_dot!(F,jacobian); 
     # ldiv!(Δy,F,(ydot.-(yproposed.-abundance) ./ nd.time.step))
     Δy::Vector{Float64} .= nd.jacobian \ ((nd.ydot .- (nd.yproposed .- nd.abundance) ./ nd.time.step))
     nd.yproposed .+= Δy
 
-    num_failed::Int64 = 0
-    num_tries::Int64 = 0
+    num_failed::Int = 0
+    num_tries::Int = 0
     while !check_mass_fraction_unity(nd)
     # while num_failed < 1
         @printf "\tnot converged; 1 - mass fraction: %e\n" abs(1 - dot(nd.yproposed, nd.net_idx.mass_vector))
@@ -94,8 +94,8 @@ function SolveNetwork!(nd::NetworkData)::Nothing
     # F = lu(nd.jacobian)
     # ps = MKLPardisoSolver()
 
-    iteration::Int64 = 0
-    failed_iterations::Int64 = 0
+    iteration::Int = 0
+    failed_iterations::Int = 0
     @printf "Time: %e,\tTime step: %e,\tIteration #: %d,\tFailed Iterations: %d,\tAvg. Iterations/Timestep: %f\n" nd.time.current nd.time.step iteration failed_iterations (failed_iterations + iteration)/iteration
     dump_iteration(nd, iteration)
     while nd.time.current < nd.time.stop
