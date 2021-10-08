@@ -4,7 +4,6 @@ using Interpolations
 
 export Trajectory
 export CurrentTrajectory
-export read_trajectory
 export get_current_trajectory
 
 struct Trajectory
