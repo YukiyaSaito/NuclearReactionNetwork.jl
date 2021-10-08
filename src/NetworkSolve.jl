@@ -18,8 +18,8 @@ using Pardiso
 export check_mass_fraction_unity
 export SolveNetwork!
 
-function check_mass_fraction_unity(nd::NetworkData, tolerance::Float64=1e-8)
-    return abs(1 - dot(nd.yproposed, nd.net_idx.mass_vector)) < tolerance
+function check_mass_fraction_unity(nd::NetworkData, tolerance::Float64=1e-8)::Bool
+    return abs(1.0 - dot(nd.yproposed, nd.net_idx.mass_vector)) < tolerance
 end
 
 function lu_dot!(F::UmfpackLU, S::SparseMatrixCSC{<:UMFVTypes,<:UMFITypes}; check::Bool=true)
@@ -40,11 +40,11 @@ function lu_dot!(F::UmfpackLU, S::SparseMatrixCSC{<:UMFVTypes,<:UMFITypes}; chec
     return F
 end
 
-function newton_raphson_iteration!(nd::NetworkData, Δy::Vector{Float64})
+function newton_raphson_iteration!(nd::NetworkData, Δy::Vector{Float64})::Int64
     nd.yproposed .= nd.abundance
     # lu_dot!(F,jacobian); 
     # ldiv!(Δy,F,(ydot.-(yproposed.-abundance) ./ nd.time.step))
-    Δy .= nd.jacobian \ ((nd.ydot .- (nd.yproposed .- nd.abundance) ./ nd.time.step))
+    Δy::Vector{Float64} .= nd.jacobian \ ((nd.ydot .- (nd.yproposed .- nd.abundance) ./ nd.time.step))
     nd.yproposed .+= Δy
 
     num_failed::Int64 = 0
@@ -76,26 +76,26 @@ function newton_raphson_iteration!(nd::NetworkData, Δy::Vector{Float64})
     return num_failed
 end
 
-function update_timestep_size!(nd::NetworkData, Δy::Vector{Float64})
+function update_timestep_size!(nd::NetworkData, Δy::Vector{Float64})::Float64
     ∂y_∂t::Vector{Float64} = abs.(Δy[nd.abundance .> 1e-9] ./ nd.abundance[nd.abundance .> 1e-9])
     if iszero(maximum(∂y_∂t))
-        nd.time.step *= 2
+        nd.time.step *= 2.0
     else
-        nd.time.step = min(2*nd.time.step, 0.25*nd.time.step/maximum(∂y_∂t))
+        nd.time.step = min(2.0*nd.time.step, 0.25*nd.time.step/maximum(∂y_∂t))
     end
 end
 
-function clip_abundance!(nd::NetworkData, min_val::Float64=0.0)
+function clip_abundance!(nd::NetworkData, min_val::Float64=0.0)::Vector{Float64}
     nd.abundance[nd.abundance .< min_val] .= 0.0
 end
 
-function SolveNetwork!(nd::NetworkData)
-    Δy = Vector{Float64}(undef, length(nd.abundance))
+function SolveNetwork!(nd::NetworkData)::Nothing
+    Δy::Vector{Float64} = Vector{Float64}(undef, length(nd.abundance))
     # F = lu(nd.jacobian)
     # ps = MKLPardisoSolver()
 
-    iteration = 0
-    failed_iterations = 0
+    iteration::Int64 = 0
+    failed_iterations::Int64 = 0
     @printf "Time: %e,\tTime step: %e,\tIteration #: %d,\tFailed Iterations: %d,\tAvg. Iterations/Timestep: %f\n" nd.time.current nd.time.step iteration failed_iterations (failed_iterations + iteration)/iteration
     dump_iteration(nd, iteration)
     while nd.time.current < nd.time.stop

@@ -21,7 +21,6 @@ import .main
 import .read_test
 
 export initialize_reactions
-export read_boundary
 export ProbDecay
 
 export main

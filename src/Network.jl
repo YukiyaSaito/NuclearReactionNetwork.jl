@@ -4,7 +4,6 @@ using DelimitedFiles
 
 export NetworkBoundary
 export NetworkIndex
-export read_boundary
 export get_networksize
 export zn_to_index
 export zn_in_network
@@ -23,7 +22,7 @@ mutable struct Time
     end
 end
 
-function step_time!(time::Time)
+function step_time!(time::Time)::Union{Nothing, Float64}
     time.current += time.step
 
     # Cap the time
@@ -48,42 +47,32 @@ struct NetworkIndex
     end
 end
 
-function read_boundary(path::String)
-    # Read Fortran formatted extent file. It determines the limit on the nuclear chart.
-    raw_boundary::Matrix{Int64} = readdlm(path, ' ', Int64)
-    fill_boundary(raw_boundary)
-end
-
-function fill_boundary(raw_boundary::Matrix{Int64}) # Function berriering
-    return NetworkBoundary(raw_boundary)
-end
-
-function get_networksize(net_idx::NetworkIndex)
+function get_networksize(net_idx::NetworkIndex)::Int64
     return net_idx.cum_isotopes[end]
 end
 
-function get_networksize(networkboundary::NetworkBoundary) # Get the number of species included in the network
-    boundary = networkboundary.matrix
+function get_networksize(networkboundary::NetworkBoundary)::Int64 # Get the number of species included in the network
+    boundary::Matrix{Int64} = networkboundary.matrix
     networksize::Int64 = 0
-    for z in 1:size(boundary,1)
+    for z::Int64 in 1:size(boundary, 1)
         n_low::Int64 = boundary[z,2]
         n_high::Int64 = boundary[z,3]
-        networksize += n_high - n_low + 1
+        networksize::Int64 += n_high - n_low + 1
     end
     return networksize
     #get boundary shape and loop over the first (second) dimension. Make the inner loop over column.
 end
 
-function NetworkIndex(networkboundary::NetworkBoundary)
-    boundary = networkboundary.matrix
-    num_isotopes = @views boundary[:, 3] - boundary[:, 2] .+ 1
-    cum_isotopes = cumsum(num_isotopes)
+function NetworkIndex(networkboundary::NetworkBoundary)::NetworkIndex
+    boundary::Matrix{Int64} = networkboundary.matrix
+    num_isotopes::Vector{Int64} = @views boundary[:, 3] - boundary[:, 2] .+ 1
+    cum_isotopes::Vector{Int64} = cumsum(num_isotopes)
 
-    networksize = get_networksize(networkboundary)
-    mass_vector = zeros(Float64, networksize)
-    index = 1
-    for (z, n_low, n_high) in eachrow(boundary)
-        dn = n_high - n_low
+    networksize::Int64 = get_networksize(networkboundary)
+    mass_vector::Vector{Float64} = zeros(Float64, networksize)
+    index::Int64 = 1
+    for (z::Int64, n_low::Int64, n_high::Int64) in eachrow(boundary)
+        dn::Int64 = n_high - n_low
         mass_vector[index:index+dn] = range(n_low, n_high, length=dn+1) .+ z
         index += dn + 1
     end
@@ -91,13 +80,13 @@ function NetworkIndex(networkboundary::NetworkBoundary)
     return NetworkIndex(networkboundary, cum_isotopes, mass_vector)
 end
 
-function zn_to_index(z::Int64, n::Int64, net_idx::NetworkIndex)
-    idx_so_far = z > 0 ? net_idx.cum_isotopes[z] : 0
-    n_low = net_idx.networkboundary.matrix[z+1, 2]
+function zn_to_index(z::Int64, n::Int64, net_idx::NetworkIndex)::Int64
+    idx_so_far::Int64 = z > 0 ? net_idx.cum_isotopes[z] : 0
+    n_low::Int64 = net_idx.networkboundary.matrix[z+1, 2]
     return idx_so_far + n - n_low + 1
 end
 
-function zn_in_network(z::Int64, n::Int64, net_idx::NetworkIndex)
+function zn_in_network(z::Int64, n::Int64, net_idx::NetworkIndex)::Bool
     # TODO: Maybe only accept uints and not ints?
     if z+1 > size(net_idx.networkboundary.matrix, 1) || z < 0
         return false

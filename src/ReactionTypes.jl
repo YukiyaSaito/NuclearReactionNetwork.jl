@@ -42,7 +42,7 @@ mutable struct AlphaDecay <: AbstractReaction
 end
 
 # TODO: Should this be == instead?
-function check_eq_reaction(lhs::AbstractReaction, rhs::AbstractReaction)
+function check_eq_reaction(lhs::AbstractReaction, rhs::AbstractReaction)::Bool
     return (typeof(lhs) == typeof(rhs)) && (lhs.reactant == rhs.reactant) && (lhs.product == rhs.product)
 end
 
