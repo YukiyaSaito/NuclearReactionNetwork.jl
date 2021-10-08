@@ -3,6 +3,7 @@ using ArgParse
 using DelimitedFiles
 using Interpolations
 using JLD2
+using ProgressBars
 
 function parse_cli_args()
     settings = ArgParseSettings()
@@ -34,7 +35,7 @@ function read_ncap(path::String)
         pfunc_flag::Int = parse(Int, lines[2])
         temperature::Vector{Float64} = [parse(Float64, s) for s in split(lines[3])]
         if pfunc_flag == 1
-            for i in 1:num_entry
+            for i in ProgressBar(1:num_entry)
                 z_rs = [parse(Int, s) for s in split(lines[6*(i-1)+4])]
                 n_rs = [parse(Int, s) for s in split(lines[6*(i-1)+5])]
                 z_ps = [parse(Int, s) for s in split(lines[6*(i-1)+6])]
@@ -61,7 +62,7 @@ function read_probdecay(path::String)
     open(path) do file
         lines = readlines(file)
         num_entry::Int = parse(Int, lines[1])
-        for i in 1:num_entry
+        for i in ProgressBar(1:num_entry)
             z_rs::Vector{Int} = [parse(Int, s) for s in split(lines[6*(i-1)+2])]
             n_rs::Vector{Int} = [parse(Int, s) for s in split(lines[6*(i-1)+3])]
             z_ps::Vector{Int} = [parse(Int, s) for s in split(lines[6*(i-1)+4])]
@@ -84,7 +85,7 @@ function read_alphadecay(path::String)
     open(path) do file
         lines = readlines(file)
         num_entries::Int = parse(Int, lines[1])
-        for i in 1:num_entries
+        for i in ProgressBar(1:num_entries)
             z_r = parse(Int, lines[5*(i-1) + 2])
             n_r = parse(Int, lines[5*(i-1) + 3])
             z_p = [parse(Int, s) for s in split(lines[5*(i-1) + 4])]
@@ -106,7 +107,7 @@ function read_photodissociation(path::String)
     open(path) do file
         lines = readlines(file)
         num_entries::Int = parse(Int, lines[1])
-        for i in 1:num_entries
+        for i in ProgressBar(1:num_entries)
             z_r = parse(Int, lines[5*(i-1) + 2])
             n_r = parse(Int, lines[5*(i-1) + 3])
             q = parse(Float64, lines[5*(i-1) + 6])
