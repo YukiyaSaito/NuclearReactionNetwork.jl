@@ -381,12 +381,10 @@ function fill_jacobian_photodissociation!(nd::NetworkData, use_yproposed::Bool=f
     end
 end
 
-using Printf
-
 function fill_jacobian!(nd::NetworkData; use_yproposed::Bool=false)
     # Jacobian coordinate: (reactant, product)
 
-    mul!(nd.jacobian, nd.jacobian, 0)
+    fill!(nd.jacobian, 0.0)
 
     if nd.included_reactions.photodissociation
         fill_jacobian_photodissociation!(nd, use_yproposed)
