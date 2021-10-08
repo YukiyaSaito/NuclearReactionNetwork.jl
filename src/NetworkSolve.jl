@@ -15,7 +15,6 @@ using SuiteSparse: decrement
 using SuiteSparse.UMFPACK: UmfpackLU, UMFVTypes, UMFITypes, umfpack_numeric!
 using Pardiso
 
-export check_mass_fraction_unity
 export SolveNetwork!
 
 function check_mass_fraction_unity(nd::NetworkData, tolerance::Float64=1e-8)::Bool

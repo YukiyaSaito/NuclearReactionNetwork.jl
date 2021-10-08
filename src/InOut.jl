@@ -21,9 +21,6 @@ struct Result
     proton_nums::Vector{Int}
     neutron_nums::Vector{Int}
     abundance::Vector{Float64} # TODO: Add more things that we can output, like PRISM does
-    function Result(proton_nums::Vector{Int}, neutron_nums::Vector{Int}, abundance::Vector{Float64})
-        return new(proton_nums, neutron_nums, abundance)
-    end
 end
 
 function Result(nd::NetworkData)::Result
@@ -254,7 +251,7 @@ function initialize_network_data(path::String)
 
     # Get the time
     println("Reading time data...")
-    time::Time = Time()
+    time::Time = Time(0.0, 1e-15, 0.0)
     if get(j["network"]["start"], "use_trajectory", false)
         lerped_times = knots(trajectory.temperatures)
         time.current = lerped_times[1]
@@ -287,11 +284,10 @@ function initialize_network_data(path::String)
     # Create the network data
     nd::NetworkData = NetworkData(net_idx, reaction_data, trajectory, abundance, yproposed, ydot, time, jacobian, output_info, included_reactions)
 
-    println("Initializing the network...")
     # Update both the Jacobian and ydot
+    println("Initializing the network...")
     fill_jacobian!(nd)
-    other_thing(nd)
-    # update_ydot!(nd)
+    update_ydot!(nd)
 
     return nd
 end

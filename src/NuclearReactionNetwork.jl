@@ -20,14 +20,8 @@ import .main
 # test
 import .read_test
 
-export initialize_reactions
-export ProbDecay
-
-export main
-
 # test
-export get_networksize
+export main
 export read_test
-
 
 end

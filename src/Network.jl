@@ -1,6 +1,4 @@
 module Network
-# using ..InOut
-using DelimitedFiles
 
 export NetworkBoundary
 export NetworkIndex
@@ -14,12 +12,6 @@ mutable struct Time
     current::Float64
     step::Float64
     stop::Float64
-    function Time(curr_time::Float64, time_step::Float64, stop_time::Float64)
-        return new(curr_time, time_step, stop_time)
-    end
-    function Time()
-        return new(0.0, 1e-15, 20.0)
-    end
 end
 
 function step_time!(time::Time)::Union{Nothing, Float64}
@@ -42,9 +34,6 @@ struct NetworkIndex
     networkboundary::NetworkBoundary{Matrix{Int}}
     cum_isotopes::Vector{Int}
     mass_vector::Vector{Float64}
-    function NetworkIndex(networkboundary::NetworkBoundary{Matrix{Int}}, cum_isotopes::Vector{Int}, mass_vector::Vector{Float64})
-        return new(networkboundary, cum_isotopes, mass_vector)
-    end
 end
 
 function get_networksize(net_idx::NetworkIndex)::Int

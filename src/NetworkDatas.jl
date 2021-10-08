@@ -11,7 +11,6 @@ export NetworkData
 export OutputInfo
 export IncludedReactions
 export fill_jacobian!
-export fill_probdecay_ydot!
 export update_ydot!
 
 struct OutputInfo
@@ -401,12 +400,6 @@ function fill_jacobian!(nd::NetworkData; use_yproposed::Bool=false)::Vector{Floa
 
     mul!(nd.jacobian, nd.jacobian, -1)
     nd.jacobian[diagind(nd.jacobian)] .+= 1/nd.time.step
-end
-
-export other_thing
-function other_thing(nd::NetworkData)
-    initialize_ydot!(nd)
-    fill_probdecay_ydot!(nd)
 end
 
 end
