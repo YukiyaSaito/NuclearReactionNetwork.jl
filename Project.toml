@@ -14,6 +14,7 @@ Pardiso = "46dd5b70-b6fb-5a00-ae2d-e8fea33afaf2"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [compat]
+JLD2 = "0.4"
 Pardiso = "0.5"
 julia = "1"
 
