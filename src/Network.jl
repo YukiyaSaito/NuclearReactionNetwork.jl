@@ -9,6 +9,7 @@ export get_networksize
 export zn_to_index
 export zn_in_network
 export Time
+export step_time!
 
 mutable struct Time
     current::Float64
@@ -22,6 +23,15 @@ mutable struct Time
     end
 end
 
+function step_time!(time::Time)
+    time.current += time.step
+
+    # Cap the time
+    if time.current >= time.stop
+        # time.step = time.stop - (time.current - time.step) TODO: Add this?
+        time.current = time.stop
+    end
+end
 
 struct NetworkBoundary{T<:Matrix{Int64}}
     matrix::T
@@ -39,8 +49,8 @@ struct NetworkIndex
 end
 
 function read_boundary(path::String)
-    #Read Fortran formatted extent file. It determines the limit on the nuclear chart.
-    raw_boundary::Matrix{Int64} = readdlm(path,' ',Int)
+    # Read Fortran formatted extent file. It determines the limit on the nuclear chart.
+    raw_boundary::Matrix{Int64} = readdlm(path, ' ', Int64)
     fill_boundary(raw_boundary)
 end
 
@@ -48,10 +58,13 @@ function fill_boundary(raw_boundary::Matrix{Int64}) # Function berriering
     return NetworkBoundary(raw_boundary)
 end
 
-function get_networksize(networkboundary::NetworkBoundary) #Get the number of spicies included in the network
+function get_networksize(net_idx::NetworkIndex)
+    return net_idx.cum_isotopes[end]
+end
+
+function get_networksize(networkboundary::NetworkBoundary) # Get the number of species included in the network
     boundary = networkboundary.matrix
     networksize::Int64 = 0
-    # println(size(boundary,1))
     for z in 1:size(boundary,1)
         n_low::Int64 = boundary[z,2]
         n_high::Int64 = boundary[z,3]
@@ -85,6 +98,10 @@ function zn_to_index(z::Int64, n::Int64, net_idx::NetworkIndex)
 end
 
 function zn_in_network(z::Int64, n::Int64, net_idx::NetworkIndex)
+    # TODO: Maybe only accept uints and not ints?
+    if z+1 > size(net_idx.networkboundary.matrix, 1) || z < 0
+        return false
+    end
     return n <= net_idx.networkboundary.matrix[z+1, 3] 
 end
 
