@@ -33,6 +33,7 @@ function read_test(path::String)
         println("Solving network...")
         SolveNetwork!(nd)
     finally
+        clip_abundance!(nd,1e-15)
         dump_result(nd)
         println("Wrote results to disk")
     end 

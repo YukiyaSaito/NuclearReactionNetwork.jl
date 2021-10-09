@@ -16,6 +16,7 @@ using SuiteSparse.UMFPACK: UmfpackLU, UMFVTypes, UMFITypes, umfpack_numeric!
 using Pardiso
 
 export SolveNetwork!
+export clip_abundance!
 
 function check_mass_fraction_unity(nd::NetworkData, tolerance::Float64=1e-8)::Bool
     return abs(1.0 - dot(nd.yproposed, nd.net_idx.mass_vector)) < tolerance
@@ -50,7 +51,7 @@ function newton_raphson_iteration!(nd::NetworkData, Δy::Vector{Float64})::Int
     num_tries::Int = 0
     while !check_mass_fraction_unity(nd)
     # while num_failed < 1
-        @printf "\tnot converged; 1 - mass fraction: %e\n" abs(1 - dot(nd.yproposed, nd.net_idx.mass_vector))
+        # @printf "\tnot converged; 1 - mass fraction: %e\n" abs(1 - dot(nd.yproposed, nd.net_idx.mass_vector))
 
         # Record how many times we've failed for later
         num_failed += 1
@@ -58,7 +59,7 @@ function newton_raphson_iteration!(nd::NetworkData, Δy::Vector{Float64})::Int
         # Halve the time step after 1 failed attempt
         num_tries += 1
         if num_tries > 1
-            @printf "\t\tHalving time step\n"
+            # @printf "\t\tHalving time step\n"
             nd.time.step /= 2
             num_tries = 0
         end
@@ -95,7 +96,7 @@ function SolveNetwork!(nd::NetworkData)::Nothing
 
     iteration::Int = 0
     failed_iterations::Int = 0
-    @printf "Time: %e,\tTime step: %e,\tIteration #: %d,\tFailed Iterations: %d,\tAvg. Iterations/Timestep: %f\n" nd.time.current nd.time.step iteration failed_iterations (failed_iterations + iteration)/iteration
+    # @printf "Time: %e,\tTime step: %e,\tIteration #: %d,\tFailed Iterations: %d,\tAvg. Iterations/Timestep: %f\n" nd.time.current nd.time.step iteration failed_iterations (failed_iterations + iteration)/iteration
     dump_iteration(nd, iteration)
     while nd.time.current < nd.time.stop
         iteration += 1
@@ -106,7 +107,7 @@ function SolveNetwork!(nd::NetworkData)::Nothing
         fill_jacobian!(nd)
         update_ydot!(nd)
         
-        @printf "Time: %e,\tTime step: %e,\tIteration #: %d,\tFailed Iterations: %d,\tAvg. Iterations/Timestep: %f\n" nd.time.current nd.time.step iteration failed_iterations (failed_iterations + iteration)/iteration
+        # @printf "Time: %e,\tTime step: %e,\tIteration #: %d,\tFailed Iterations: %d,\tAvg. Iterations/Timestep: %f\n" nd.time.current nd.time.step iteration failed_iterations (failed_iterations + iteration)/iteration
         dump_iteration(nd, iteration)
     end
 end

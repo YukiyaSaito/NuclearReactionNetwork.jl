@@ -39,13 +39,9 @@ function Result(nd::NetworkData)::Result
     return Result(zs, ns, nd.abundance)
 end
 
-function dump_result(nd::NetworkData)::Nothing
-    if !nd.output_info.dump_final_output
-        return
-    end
-
+function dump_y(nd::NetworkData)::Nothing
     result::Result = Result(nd)
-    open(nd.output_info.final_output_path, "w") do out_file
+    open(nd.output_info.final_y_path, "w") do out_file
         # TODO: This should really write [Int Int Float64], but right now it gets promoted to [Float64 Float64 Float64]
         idxs::BitVector = .!iszero.(result.abundance)
         Zs::Vector{Int} = result.proton_nums[idxs]
@@ -53,6 +49,35 @@ function dump_result(nd::NetworkData)::Nothing
         ys::Vector{Float64} = result.abundance[idxs]
         writedlm(out_file, [Zs As ys])
     end
+    return nothing
+end
+
+function dump_ya(nd::NetworkData)::Nothing
+    result::Result = Result(nd)
+    open(nd.output_info.final_ya_path, "w") do out_file
+        # TODO: This should really write [Int Int Float64], but right now it gets promoted to [Float64 Float64 Float64]
+        idxs::BitVector = .!iszero.(result.abundance)
+        Zs::Vector{Int} = result.proton_nums[idxs]
+        As::Vector{Int} = Zs .+ result.neutron_nums[idxs]
+        ys::Vector{Float64} = result.abundance[idxs]
+        As_unique::SortedSet{Int} = SortedSet(As)
+        yas::Vector{Float64} = zeros(Float64,length(As_unique))
+        for (i, a) in zip(1:length(As_unique), As_unique)
+            yas[i] = sum(ys[As .== a])
+        end
+        writedlm(out_file, [collect(As_unique) yas])
+    end
+    return nothing
+end
+
+function dump_result(nd::NetworkData)::Nothing
+    if nd.output_info.dump_final_y
+        dump_y(nd)
+    end
+    if nd.output_info.dump_final_ya
+        dump_ya(nd)
+    end
+    return nothing
 end
 
 function dump_iteration(nd::NetworkData, iteration::Int)::Nothing
@@ -275,11 +300,13 @@ function initialize_network_data(path::String)
 
     # Grab the output info
     println("Reading the output information...")
-    dump_final_output::Bool = get(get(get(j, "output", Dict()), "y", Dict()), "active", false)
-    final_output_path::Union{Missing, String} = dump_final_output ? j["output"]["y"]["path"] : missing
+    dump_final_y::Bool = get(get(get(j, "output", Dict()), "y", Dict()), "active", false)
+    final_y_path::Union{Missing, String} = dump_final_y ? j["output"]["y"]["path"] : missing
+    dump_final_ya::Bool = get(get(get(j, "output", Dict()), "ya", Dict()), "active", false)
+    final_ya_path::Union{Missing, String} = dump_final_y ? j["output"]["ya"]["path"] : missing
     dump_each_iteration::Bool = get(get(get(j, "output", Dict()), "ytime", Dict()), "active", false)
-    iteration_output_path::Union{Missing, String} = dump_final_output ? j["output"]["ytime"]["path"] : missing
-    output_info::OutputInfo = OutputInfo(dump_final_output, final_output_path, dump_each_iteration, iteration_output_path)
+    iteration_output_path::Union{Missing, String} = dump_final_y ? j["output"]["ytime"]["path"] : missing
+    output_info::OutputInfo = OutputInfo(dump_final_y, final_y_path, dump_final_ya, final_ya_path, dump_each_iteration, iteration_output_path)
 
     # Create the network data
     nd::NetworkData = NetworkData(net_idx, reaction_data, trajectory, abundance, yproposed, ydot, time, jacobian, output_info, included_reactions)

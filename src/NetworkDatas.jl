@@ -14,8 +14,10 @@ export fill_jacobian!
 export update_ydot!
 
 struct OutputInfo
-    dump_final_output::Bool
-    final_output_path::Union{Missing, String}
+    dump_final_y::Bool
+    final_y_path::Union{Missing, String}
+    dump_final_ya::Bool
+    final_ya_path::Union{Missing, String}
     dump_each_iteration::Bool
     iteration_output_path::Union{Missing, String}
 end
