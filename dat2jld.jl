@@ -3,6 +3,7 @@ using ArgParse
 using DelimitedFiles
 using Interpolations
 using JLD2
+using ProgressBars
 
 function parse_cli_args()
     settings = ArgParseSettings()
@@ -30,15 +31,15 @@ function read_ncap(path::String)
     ncaps = Vector{NRN.NeutronCapture}()
     open(path) do file
         lines = readlines(file)
-        num_entry::Int64 = parse(Int64, lines[1])
-        pfunc_flag::Int64 = parse(Int64, lines[2])
+        num_entry::Int = parse(Int, lines[1])
+        pfunc_flag::Int = parse(Int, lines[2])
         temperature::Vector{Float64} = [parse(Float64, s) for s in split(lines[3])]
         if pfunc_flag == 1
-            for i in 1:num_entry
-                z_rs = [parse(Int64, s) for s in split(lines[6*(i-1)+4])]
-                n_rs = [parse(Int64, s) for s in split(lines[6*(i-1)+5])]
-                z_ps = [parse(Int64, s) for s in split(lines[6*(i-1)+6])]
-                n_ps = [parse(Int64, s) for s in split(lines[6*(i-1)+7])]
+            for i in ProgressBar(1:num_entry)
+                z_rs = [parse(Int, s) for s in split(lines[6*(i-1)+4])]
+                n_rs = [parse(Int, s) for s in split(lines[6*(i-1)+5])]
+                z_ps = [parse(Int, s) for s in split(lines[6*(i-1)+6])]
+                n_ps = [parse(Int, s) for s in split(lines[6*(i-1)+7])]
                 rates = [parse(Float64, s) for s in split(lines[6*(i-1)+8])]
                 pfuncs = [parse(Float64, s) for s in split(lines[6*(i-1)+9])]
 
@@ -60,12 +61,12 @@ function read_probdecay(path::String)
     probdecay = Vector{NRN.ProbDecay}()
     open(path) do file
         lines = readlines(file)
-        num_entry::Int64 = parse(Int64, lines[1])
-        for i in 1:num_entry
-            z_rs::Vector{Int64} = [parse(Int64, s) for s in split(lines[6*(i-1)+2])]
-            n_rs::Vector{Int64} = [parse(Int64, s) for s in split(lines[6*(i-1)+3])]
-            z_ps::Vector{Int64} = [parse(Int64, s) for s in split(lines[6*(i-1)+4])]
-            n_ps::Vector{Int64} = [parse(Int64, s) for s in split(lines[6*(i-1)+5])]
+        num_entry::Int = parse(Int, lines[1])
+        for i in ProgressBar(1:num_entry)
+            z_rs::Vector{Int} = [parse(Int, s) for s in split(lines[6*(i-1)+2])]
+            n_rs::Vector{Int} = [parse(Int, s) for s in split(lines[6*(i-1)+3])]
+            z_ps::Vector{Int} = [parse(Int, s) for s in split(lines[6*(i-1)+4])]
+            n_ps::Vector{Int} = [parse(Int, s) for s in split(lines[6*(i-1)+5])]
             rate::Float64 = parse(Float64, lines[6*(i-1)+6])
             average_number::Vector{Float64} = [parse(Float64, s) for s in split(lines[6*(i-1)+7])]
 
@@ -83,12 +84,12 @@ function read_alphadecay(path::String)
     alphadecay = Vector{NRN.AlphaDecay}()
     open(path) do file
         lines = readlines(file)
-        num_entries::Int64 = parse(Int64, lines[1])
-        for i in 1:num_entries
-            z_r = parse(Int64, lines[5*(i-1) + 2])
-            n_r = parse(Int64, lines[5*(i-1) + 3])
-            z_p = [parse(Int64, s) for s in split(lines[5*(i-1) + 4])]
-            n_p = [parse(Int64, s) for s in split(lines[5*(i-1) + 5])]
+        num_entries::Int = parse(Int, lines[1])
+        for i in ProgressBar(1:num_entries)
+            z_r = parse(Int, lines[5*(i-1) + 2])
+            n_r = parse(Int, lines[5*(i-1) + 3])
+            z_p = [parse(Int, s) for s in split(lines[5*(i-1) + 4])]
+            n_p = [parse(Int, s) for s in split(lines[5*(i-1) + 5])]
             rate = parse(Float64, lines[5*(i-1) + 6])
 
             reactant = (z_r, n_r)
@@ -102,13 +103,13 @@ end
 
 function read_photodissociation(path::String)
     # Read the reverse reaction file
-    photodissociation_dict = Dict{Tuple{Int64, Int64}, NRN.Photodissociation}()
+    photodissociation_dict = Dict{Tuple{Int, Int}, NRN.Photodissociation}()
     open(path) do file
         lines = readlines(file)
-        num_entries::Int64 = parse(Int, lines[1])
-        for i in 1:num_entries
-            z_r = parse(Int64, lines[5*(i-1) + 2])
-            n_r = parse(Int64, lines[5*(i-1) + 3])
+        num_entries::Int = parse(Int, lines[1])
+        for i in ProgressBar(1:num_entries)
+            z_r = parse(Int, lines[5*(i-1) + 2])
+            n_r = parse(Int, lines[5*(i-1) + 3])
             q = parse(Float64, lines[5*(i-1) + 6])
 
             reactant = (z_r, n_r)
@@ -129,12 +130,12 @@ end
 
 function read_init_comp(path::String)
     data::Matrix{Float64} = readdlm(path)
-    return [(Int64(round(z)), Int64(round(a)), y) for (z, a, y) in eachrow(data)]
+    return [(Int(round(z)), Int(round(a)), y) for (z, a, y) in eachrow(data)]
 end
 
 function read_extent(path::String)
-    raw_boundary::Matrix{Int64} = readdlm(path, ' ', Int64)
-    boundary = NRN.NetworkBoundary{Matrix{Int64}}(raw_boundary)
+    raw_boundary::Matrix{Int} = readdlm(path, ' ', Int)
+    boundary = NRN.NetworkBoundary{Matrix{Int}}(raw_boundary)
     return NRN.NetworkIndex(boundary)
 end
 

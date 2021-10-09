@@ -18,23 +18,20 @@ export initialize_network_data
 
 # TODO: Should this be a matrix rather than a series of vectors of the same size (we would lose type inhomogeneity)?
 struct Result
-    proton_nums::Vector{Int64}
-    neutron_nums::Vector{Int64}
+    proton_nums::Vector{Int}
+    neutron_nums::Vector{Int}
     abundance::Vector{Float64} # TODO: Add more things that we can output, like PRISM does
-    function Result(proton_nums::Vector{Int64}, neutron_nums::Vector{Int64}, abundance::Vector{Float64})
-        return new(proton_nums, neutron_nums, abundance)
-    end
 end
 
-function Result(nd::NetworkData)
-    boundary = nd.net_idx.networkboundary.matrix
+function Result(nd::NetworkData)::Result
+    boundary::Matrix{Int} = nd.net_idx.networkboundary.matrix
 
-    zs = zeros(Int64, length(nd.abundance))
-    ns = zeros(Int64, length(nd.abundance))
+    zs::Vector{Int} = zeros(Int, length(nd.abundance))
+    ns::Vector{Int} = zeros(Int, length(nd.abundance))
 
-    index = 1
-    for (z, n_low, n_high) in eachrow(boundary)
-        dn = n_high - n_low
+    index::Int = 1
+    for (z::Int, n_low::Int, n_high::Int) in eachrow(boundary)
+        dn::Int = n_high - n_low
         zs[index:index+dn] = repeat([z], dn+1)
         ns[index:index+dn] = range(n_low, n_high, length=dn+1)
         index += dn + 1
@@ -42,54 +39,54 @@ function Result(nd::NetworkData)
     return Result(zs, ns, nd.abundance)
 end
 
-function dump_result(nd::NetworkData)
+function dump_result(nd::NetworkData)::Nothing
     if !nd.output_info.dump_final_output
         return
     end
 
-    result = Result(nd)
+    result::Result = Result(nd)
     open(nd.output_info.final_output_path, "w") do out_file
-        # TODO: This should really write [Int64 Int64 Float64], but right now it gets promoted to [Float64 Float64 Float64]
-        idxs = .!iszero.(result.abundance)
-        Zs = result.proton_nums[idxs]
-        As = Zs .+ result.neutron_nums[idxs]
-        ys = result.abundance[idxs]
+        # TODO: This should really write [Int Int Float64], but right now it gets promoted to [Float64 Float64 Float64]
+        idxs::BitVector = .!iszero.(result.abundance)
+        Zs::Vector{Int} = result.proton_nums[idxs]
+        As::Vector{Int} = Zs .+ result.neutron_nums[idxs]
+        ys::Vector{Float64} = result.abundance[idxs]
         writedlm(out_file, [Zs As ys])
     end
 end
 
-function dump_iteration(nd::NetworkData, iteration::Int64)
+function dump_iteration(nd::NetworkData, iteration::Int)::Nothing
     if !nd.output_info.dump_each_iteration
         return
     end
 
-    result = Result(nd)
-    curr_traj = get_current_trajectory(nd.trajectory, nd.time.current)
-    mode = iteration == 0 ? "w" : "a"
+    result::Result = Result(nd)
+    curr_traj::CurrentTrajectory = get_current_trajectory(nd.trajectory, nd.time.current)
+    mode::String = iteration == 0 ? "w" : "a"
     open(nd.output_info.iteration_output_path, mode) do out_file
         write(out_file, "$(iteration)\t$(nd.time.current)\t$(curr_traj.temperature)\t$(curr_traj.density)\n")
-        idxs = .!iszero.(result.abundance)
-        Zs = result.proton_nums[idxs]
-        As = Zs .+ result.neutron_nums[idxs]
-        ys = result.abundance[idxs]
+        idxs::BitVector = .!iszero.(result.abundance)
+        Zs::Vecotr{Int} = result.proton_nums[idxs]
+        As::Vector{Int} = Zs .+ result.neutron_nums[idxs]
+        ys::Vector{Int} = result.abundance[idxs]
         writedlm(out_file, [Zs As ys])
         write(out_file, "\n")
     end
 end
 
-function read_boundary(path::String)
+function read_boundary(path::String)::Nothing
     # Read Fortran formatted extent file. It determines the limit on the nuclear chart.
-    raw_boundary::Matrix{Int64} = readdlm(path, ' ', Int)
+    raw_boundary::Matrix{Int} = readdlm(path, ' ', Int)
     fill_boundary(raw_boundary)
 end
 
-function read_ncap!(reaction_data::ReactionData, path::String, net_idx::NetworkIndex)
+function read_ncap!(reaction_data::ReactionData, path::String, net_idx::NetworkIndex)::Nothing
     ncaps::Vector{NeutronCapture} = load_object(path)
-    for ncap in ncaps
+    for ncap::NeutronCapture in ncaps
         # Make sure every species involved in the reaction is in the network
-        out_of_network = false
-        for species in [ncap.product; ncap.reactant]
-            z, n = species
+        out_of_network::Bool = false
+        for species::Tuple{Int, Int} in [ncap.product; ncap.reactant]
+            z::Int, n::Int = species
             if !zn_in_network(z, n, net_idx)
                 out_of_network = true
                 break
@@ -100,19 +97,19 @@ function read_ncap!(reaction_data::ReactionData, path::String, net_idx::NetworkI
         end
 
         # Add the reaction to the dictionary
-        z_p, n_p = ncap.product[1]
-        product_idx = zn_to_index(z_p, n_p, net_idx)
+        z_p::Int, n_p::Int = ncap.product[1]
+        product_idx::Int = zn_to_index(z_p, n_p, net_idx)
         reaction_data.neutroncapture[product_idx] = ncap
     end
 end
 
-function read_probdecay!(reaction_data::ReactionData, path::String, net_idx::NetworkIndex)
+function read_probdecay!(reaction_data::ReactionData, path::String, net_idx::NetworkIndex)::Nothing
     probdecay::Vector{ProbDecay} = load_object(path)
-    for decay in probdecay
+    for decay::ProbDecay in probdecay
         # Make sure every species involved in the reaction is in the network
-        out_of_network = false
-        for species in [decay.product; decay.reactant]
-            z, n = species
+        out_of_network::Bool = false
+        for species::Tuple{Int, Int} in [decay.product; decay.reactant]
+            z::Int, n::Int = species
             if !zn_in_network(z, n, net_idx)
                 out_of_network = true
                 break
@@ -123,7 +120,7 @@ function read_probdecay!(reaction_data::ReactionData, path::String, net_idx::Net
         end
 
         # Check if we already have this reaction in the network
-        idx = findfirst(other -> check_eq_reaction(decay, other), reaction_data.probdecay)
+        idx::Union{Nothing, Int} = findfirst(other -> check_eq_reaction(decay, other), reaction_data.probdecay)
         if !isnothing(idx)
             # Replace the old data
             reaction_data.probdecay[idx] = decay
@@ -134,13 +131,13 @@ function read_probdecay!(reaction_data::ReactionData, path::String, net_idx::Net
     end
 end
 
-function read_alphadecay!(reaction_data::ReactionData, path::String, net_idx::NetworkIndex)
+function read_alphadecay!(reaction_data::ReactionData, path::String, net_idx::NetworkIndex)::Nothing
     alphadecay::Vector{AlphaDecay} = load_object(path)
-    for decay in alphadecay
+    for decay::AlphaDecay in alphadecay
         # Make sure every species involved in the reaction is in the network
-        out_of_network = false
-        for species in [decay.product; decay.reactant]
-            z, n = species
+        out_of_network::Bool = false
+        for species::Tuple{Int, Int} in [decay.product; decay.reactant]
+            z::Int, n::Int = species
             if !zn_in_network(z, n, net_idx)
                 out_of_network = true
                 break
@@ -151,7 +148,7 @@ function read_alphadecay!(reaction_data::ReactionData, path::String, net_idx::Ne
         end
 
         # Check if we already have this reaction in the network
-        idx = findfirst(other -> check_eq_reaction(decay, other), reaction_data.alphadecay)
+        idx::Union{Nothing, Int} = findfirst(other -> check_eq_reaction(decay, other), reaction_data.alphadecay)
         if !isnothing(idx)
             # Replace the old data
             reaction_data.prodecay[idx] = decay
@@ -162,21 +159,21 @@ function read_alphadecay!(reaction_data::ReactionData, path::String, net_idx::Ne
     end
 end
 
-function read_photodissociation!(reaction_data::ReactionData, path::String, net_idx::NetworkIndex)
-    photodissociation_dict::Dict{Tuple{Int64, Int64}, Photodissociation} = load_object(path)
-    for (reactant, photodissociation) in photodissociation_dict
-        z_r, n_r = reactant
+function read_photodissociation!(reaction_data::ReactionData, path::String, net_idx::NetworkIndex)::Nothing
+    photodissociation_dict::Dict{Tuple{Int, Int}, Photodissociation} = load_object(path)
+    for (reactant::Tuple{Int, Int}, photodissociation::Photodissociation) in photodissociation_dict
+        z_r::Int, n_r::Int = reactant
         # Make sure the reactant is in the network
         if !zn_in_network(z_r, n_r, net_idx)
             continue
         end
-        reactant_idx = zn_to_index(z_r, n_r, net_idx)
+        reactant_idx::Int = zn_to_index(z_r, n_r, net_idx)
 
         # Make sure we have the forward rate associated with this reverse rate
         if !haskey(reaction_data.neutroncapture, reactant_idx)
             continue
         end
-        ncap = reaction_data.neutroncapture[reactant_idx]
+        ncap::NeutronCapture = reaction_data.neutroncapture[reactant_idx]
 
         # Add the q value to the neutroncapture
         ncap.q = photodissociation.q
@@ -208,17 +205,17 @@ function read_dataset!(reaction_data::ReactionData, included_reactions::Included
     end
 end
 
-function read_initial_abundance(path::String, net_idx::NetworkIndex)
-    data = load_object(path)
-    total = sum(zay->zay[3], data)
+function read_initial_abundance(path::String, net_idx::NetworkIndex)::Vector{Float64}
+    data::Vector{Tuple{Int, Int, Float64}} = load_object(path)
+    total::Float64 = sum(zay->zay[3], data)
     data = [(z, a, y/total) for (z, a, y) in data]
-    abundance = zeros(Float64, get_networksize(net_idx))
-    for (z, a, y) in data
-        n = a - z
+    abundance::Vector{Float64} = zeros(Float64, get_networksize(net_idx))
+    for (z::Int, a::Int, y::Float64) in data
+        n::Int = a - z
         while !zn_in_network(z, n, net_idx)
             n -= 1
         end
-        idx = zn_to_index(z, n, net_idx)
+        idx::Int = zn_to_index(z, n, net_idx)
         abundance[idx] += y/(z+n)
     end
     return abundance
@@ -250,11 +247,11 @@ function initialize_network_data(path::String)
     yproposed::Vector{Float64} = Vector{Float64}(undef, length(abundance))
 
     # The size of the network
-    networksize::Int64 = get_networksize(net_idx)
+    networksize::Int = get_networksize(net_idx)
 
     # Get the time
     println("Reading time data...")
-    time = Time()
+    time::Time = Time(0.0, 1e-15, 0.0)
     if get(j["network"]["start"], "use_trajectory", false)
         lerped_times = knots(trajectory.temperatures)
         time.current = lerped_times[1]
@@ -274,24 +271,23 @@ function initialize_network_data(path::String)
 
     # Create the Jacobian
     println("Creating the Jacobian...")
-    jacobian::SparseMatrixCSC{Float64, Int64} = spzeros(Float64, Int64, (networksize, networksize))
+    jacobian::SparseMatrixCSC{Float64, Int} = spzeros(Float64, Int, (networksize, networksize))
 
     # Grab the output info
     println("Reading the output information...")
     dump_final_output::Bool = get(get(get(j, "output", Dict()), "y", Dict()), "active", false)
-    final_output_path = dump_final_output ? j["output"]["y"]["path"] : missing
+    final_output_path::Union{Missing, String} = dump_final_output ? j["output"]["y"]["path"] : missing
     dump_each_iteration::Bool = get(get(get(j, "output", Dict()), "ytime", Dict()), "active", false)
-    iteration_output_path = dump_final_output ? j["output"]["ytime"]["path"] : missing
-    output_info = OutputInfo(dump_final_output, final_output_path, dump_each_iteration, iteration_output_path)
+    iteration_output_path::Union{Missing, String} = dump_final_output ? j["output"]["ytime"]["path"] : missing
+    output_info::OutputInfo = OutputInfo(dump_final_output, final_output_path, dump_each_iteration, iteration_output_path)
 
     # Create the network data
     nd::NetworkData = NetworkData(net_idx, reaction_data, trajectory, abundance, yproposed, ydot, time, jacobian, output_info, included_reactions)
 
-    println("Initializing the network...")
     # Update both the Jacobian and ydot
+    println("Initializing the network...")
     fill_jacobian!(nd)
-    other_thing(nd)
-    # update_ydot!(nd)
+    update_ydot!(nd)
 
     return nd
 end
