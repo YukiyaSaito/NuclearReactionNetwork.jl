@@ -15,6 +15,7 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [compat]
 ArgParse = "1"
+JLD2 = "0.4"
 Pardiso = "0.5"
 julia = "1"
 
