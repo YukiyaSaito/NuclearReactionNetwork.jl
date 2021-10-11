@@ -40,11 +40,18 @@ function lu_dot!(F::UmfpackLU, S::SparseMatrixCSC{<:UMFVTypes,<:UMFITypes}; chec
     return F
 end
 
+function solve_linear_system(nd::NetworkData)::Vector{Float64}
+    # Solves Ax = b
+    A = nd.jacobian
+    b = ((nd.ydot .- (nd.yproposed .- nd.abundance) ./ nd.time.step))
+    return solve(nd.pardiso, A, b)
+end
+
 function newton_raphson_iteration!(nd::NetworkData, Δy::Vector{Float64})::Int
     nd.yproposed .= nd.abundance
     # lu_dot!(F,jacobian); 
     # ldiv!(Δy,F,(ydot.-(yproposed.-abundance) ./ nd.time.step))
-    Δy::Vector{Float64} .= nd.jacobian \ ((nd.ydot .- (nd.yproposed .- nd.abundance) ./ nd.time.step))
+    Δy::Vector{Float64} .= solve_linear_system(nd)
     nd.yproposed .+= Δy
 
     num_failed::Int = 0
@@ -68,7 +75,7 @@ function newton_raphson_iteration!(nd::NetworkData, Δy::Vector{Float64})::Int
         fill_jacobian!(nd, use_yproposed=true)
         update_ydot!(nd, use_yproposed=true)
 
-        Δy .= nd.jacobian \ ((nd.ydot .- (nd.yproposed .- nd.abundance) ./ nd.time.step))
+        Δy .= solve_linear_system(nd)
         nd.yproposed .+= Δy
     end
     nd.abundance .= nd.yproposed # FIXME: Performance boost: This could be just regular assignment (=, not .=) because of how NetworkDatas is setup
@@ -107,7 +114,7 @@ function SolveNetwork!(nd::NetworkData)::Nothing
         fill_jacobian!(nd)
         update_ydot!(nd)
         
-        # @printf "Time: %e,\tTime step: %e,\tIteration #: %d,\tFailed Iterations: %d,\tAvg. Iterations/Timestep: %f\n" nd.time.current nd.time.step iteration failed_iterations (failed_iterations + iteration)/iteration
+        @printf "Time: %e,\tTime step: %e,\tIteration #: %d,\tFailed Iterations: %d,\tAvg. Iterations/Timestep: %f\n" nd.time.current nd.time.step iteration failed_iterations (failed_iterations + iteration)/iteration
         dump_iteration(nd, iteration)
     end
 end

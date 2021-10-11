@@ -6,6 +6,7 @@ using JSON
 using JLD2
 using SparseArrays
 using Interpolations
+using Pardiso
 using ..Astro
 using ..ReactionTypes
 using ..Network
@@ -308,8 +309,11 @@ function initialize_network_data(path::String)
     iteration_output_path::Union{Missing, String} = dump_final_y ? j["output"]["ytime"]["path"] : missing
     output_info::OutputInfo = OutputInfo(dump_final_y, final_y_path, dump_final_ya, final_ya_path, dump_each_iteration, iteration_output_path)
 
+    println("Initializing MKLPARDISO...")
+    pardiso = MKLPardisoSolver()
+
     # Create the network data
-    nd::NetworkData = NetworkData(net_idx, reaction_data, trajectory, abundance, yproposed, ydot, time, jacobian, output_info, included_reactions)
+    nd::NetworkData = NetworkData(net_idx, reaction_data, trajectory, abundance, yproposed, ydot, time, jacobian, output_info, included_reactions, pardiso)
 
     # Update both the Jacobian and ydot
     println("Initializing the network...")
