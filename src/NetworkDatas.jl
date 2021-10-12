@@ -3,6 +3,7 @@ module NetworkDatas
 using ..Astro
 using ..ReactionTypes
 using ..Network
+using ..LinearSolvers
 using SparseArrays
 using LinearAlgebra
 using DelimitedFiles
@@ -40,6 +41,7 @@ struct NetworkData
     jacobian::SparseMatrixCSC{Float64, Int}
     output_info::OutputInfo
     included_reactions::IncludedReactions
+    solver::LinearSolver
 end
 
 function initialize_ydot!(nd::NetworkData)::Vector{Float64}
