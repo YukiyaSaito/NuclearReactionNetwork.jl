@@ -3,7 +3,8 @@ using ..Astro
 using ..Network
 using ..ReactionTypes
 using ..InOut
-using ...NetworkDatas
+using ..NetworkDatas
+using ..LinearSolvers
 using LinearAlgebra
 using DelimitedFiles
 using Printf
@@ -40,18 +41,14 @@ function lu_dot!(F::UmfpackLU, S::SparseMatrixCSC{<:UMFVTypes,<:UMFITypes}; chec
     return F
 end
 
-function solve_linear_system(nd::NetworkData)::Vector{Float64}
-    # Solves Ax = b
-    A = nd.jacobian
-    b = ((nd.ydot .- (nd.yproposed .- nd.abundance) ./ nd.time.step))
-    return solve(nd.pardiso, A, b)
-end
-
 function newton_raphson_iteration!(nd::NetworkData, Δy::Vector{Float64})::Int
     nd.yproposed .= nd.abundance
     # lu_dot!(F,jacobian); 
     # ldiv!(Δy,F,(ydot.-(yproposed.-abundance) ./ nd.time.step))
-    Δy::Vector{Float64} .= solve_linear_system(nd)
+
+    A::SparseMatrixCSC{Float64, Int64} = nd.jacobian
+    b::Vector{Float64} = ((nd.ydot .- (nd.yproposed .- nd.abundance) ./ nd.time.step))
+    Δy::Vector{Float64} .= solve_linear_system(A, b, nd.solver)
     nd.yproposed .+= Δy
 
     num_failed::Int = 0
@@ -75,7 +72,9 @@ function newton_raphson_iteration!(nd::NetworkData, Δy::Vector{Float64})::Int
         fill_jacobian!(nd, use_yproposed=true)
         update_ydot!(nd, use_yproposed=true)
 
-        Δy .= solve_linear_system(nd)
+        A = nd.jacobian
+        b = ((nd.ydot .- (nd.yproposed .- nd.abundance) ./ nd.time.step))
+        Δy .= solve_linear_system(A, b, nd.solver)
         nd.yproposed .+= Δy
     end
     nd.abundance .= nd.yproposed # FIXME: Performance boost: This could be just regular assignment (=, not .=) because of how NetworkDatas is setup

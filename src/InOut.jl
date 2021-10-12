@@ -11,6 +11,7 @@ using ..Astro
 using ..ReactionTypes
 using ..Network
 using ..NetworkDatas
+using ..LinearSolvers
 
 export Result
 export dump_result
@@ -247,6 +248,19 @@ function read_initial_abundance(path::String, net_idx::NetworkIndex)::Vector{Flo
     return abundance
 end
 
+function get_solver(type::String)
+    if uppercase(type) == "UMFPACK"
+        println("Using UMFPACK")
+        return LS_UMFPACK()
+    elseif uppercase(type) == "PARDISO"
+        println("Using Pardiso")
+        return LS_MKLPardisoSolver(MKLPardisoSolver())
+    else
+        println("Using UMFPACK")
+        return LS_UMFPACK()
+    end
+end
+
 function initialize_network_data(path::String)
     # Parse the JSON control file
     println("Parsing JSON...")
@@ -309,11 +323,12 @@ function initialize_network_data(path::String)
     iteration_output_path::Union{Missing, String} = dump_final_y ? j["output"]["ytime"]["path"] : missing
     output_info::OutputInfo = OutputInfo(dump_final_y, final_y_path, dump_final_ya, final_ya_path, dump_each_iteration, iteration_output_path)
 
-    println("Initializing MKLPARDISO...")
-    pardiso = MKLPardisoSolver()
+    # Get the linear solver
+    println("Initializing solver...")
+    solver = get_solver(j["computational"]["solver"]["type"])
 
     # Create the network data
-    nd::NetworkData = NetworkData(net_idx, reaction_data, trajectory, abundance, yproposed, ydot, time, jacobian, output_info, included_reactions, pardiso)
+    nd::NetworkData = NetworkData(net_idx, reaction_data, trajectory, abundance, yproposed, ydot, time, jacobian, output_info, included_reactions, solver)
 
     # Update both the Jacobian and ydot
     println("Initializing the network...")
