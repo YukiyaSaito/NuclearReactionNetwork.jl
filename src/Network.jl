@@ -76,7 +76,7 @@ function zn_to_index(z::Int, n::Int, net_idx::NetworkIndex)::Int
 end
 
 function zn_in_network(z::Int, n::Int, net_idx::NetworkIndex)::Bool
-    # TODO: Maybe only accept Ints and not ints?
+    # TODO: Maybe only accept UInts and not Ints?
     if z+1 > size(net_idx.networkboundary.matrix, 1) || z < 0
         return false
     end
