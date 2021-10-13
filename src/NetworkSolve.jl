@@ -46,7 +46,7 @@ function newton_raphson_iteration!(nd::NetworkData, Δy::Vector{Float64})::Int
     # lu_dot!(F,jacobian); 
     # ldiv!(Δy,F,(ydot.-(yproposed.-abundance) ./ nd.time.step))
 
-    A::SparseMatrixCSC{Float64, Int64} = nd.jacobian
+    A::SparseMatrixCSC{Float64, Int} = nd.jacobian
     b::Vector{Float64} = ((nd.ydot .- (nd.yproposed .- nd.abundance) ./ nd.time.step))
     Δy::Vector{Float64} .= solve_linear_system(A, b, nd.solver)
     nd.yproposed .+= Δy

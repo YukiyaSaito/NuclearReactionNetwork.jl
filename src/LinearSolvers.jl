@@ -17,15 +17,15 @@ struct LS_MKLPardisoSolver <: LinearSolver
     pardiso::MKLPardisoSolver
 end
 
-function solve_linear_system(A::SparseMatrixCSC{Float64, Int64}, b::Vector{Float64}, solver::LinearSolver)::Vector{Float64}
+function solve_linear_system(A::SparseMatrixCSC{Float64, Int}, b::Vector{Float64}, solver::LinearSolver)::Vector{Float64}
     return A\b
 end
 
-function solve_linear_system(A::SparseMatrixCSC{Float64, Int64}, b::Vector{Float64}, solver::LS_UMFPACK)::Vector{Float64}
+function solve_linear_system(A::SparseMatrixCSC{Float64, Int}, b::Vector{Float64}, solver::LS_UMFPACK)::Vector{Float64}
     return A\b
 end
 
-function solve_linear_system(A::SparseMatrixCSC{Float64, Int64}, b::Vector{Float64}, solver::LS_MKLPardisoSolver)::Vector{Float64}
+function solve_linear_system(A::SparseMatrixCSC{Float64, Int}, b::Vector{Float64}, solver::LS_MKLPardisoSolver)::Vector{Float64}
     return solve(solver.pardiso, A, b)
 end
 
