@@ -1,6 +1,6 @@
 module ReactionTypes
 
-using Interpolations
+using ..LinearInterpolations
 using ..Astro
 using ..Network
 
@@ -29,8 +29,7 @@ end
 mutable struct NeutronCapture <: AbstractReaction # Temperature Dependent Reactions
     reactant::Vector{Tuple{Int, Int}} # [(Z_0, N_0), (Z_1, N_1), ... (Z_n, N_n)]
     product::Vector{Tuple{Int, Int}}
-    rate::Interpolations.Extrapolation
-    pfunc::Interpolations.Extrapolation
+    rates_pfuncs_lerp::NcapLerp
     current_rate::Float64 
     q::Union{Missing, Float64}
 end

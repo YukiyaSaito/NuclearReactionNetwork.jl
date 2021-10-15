@@ -1,6 +1,7 @@
 module NuclearReactionNetwork
 
 # Write your package code here.
+include("./LinearInterpolations.jl")
 include("./LinearSolvers.jl")
 include("./Astro.jl")
 include("./Network.jl")
@@ -11,6 +12,7 @@ include("./NetworkSolve.jl")
 
 include("./main.jl")
 
+import .LinearInterpolations
 import .LinearSolvers
 import .ReactionTypes
 import .Network

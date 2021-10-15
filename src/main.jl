@@ -9,7 +9,6 @@ using SparseArrays
 using Printf
 using InteractiveUtils
 using Profile
-using Interpolations
 
 export main
 export read_test

@@ -1,5 +1,6 @@
 module NetworkDatas
 
+using ..LinearInterpolations
 using ..Astro
 using ..ReactionTypes
 using ..Network
@@ -33,7 +34,7 @@ end
 struct NetworkData
     net_idx::NetworkIndex
     reaction_data::ReactionData
-    trajectory::Trajectory
+    trajectory::TrajectoryLerp
     abundance::Vector{Float64}
     yproposed::Vector{Float64}
     ydot::Vector{Float64}
@@ -80,7 +81,7 @@ function fill_neutroncapture_ydot!(nd::NetworkData, use_yproposed::Bool=false)::
 
     curr_traj::CurrentTrajectory = get_current_trajectory(nd.trajectory, nd.time.current)
     for capture::NeutronCapture in values(nd.reaction_data.neutroncapture)
-        rate::Float64 = capture.rate(curr_traj.temperature)
+        rate::Float64 = get_rate(capture.rates_pfuncs_lerp, curr_traj.temperature)
         if iszero(rate)
             continue
         end
@@ -157,7 +158,7 @@ function fill_photodissociation_ydot!(nd::NetworkData, use_yproposed::Bool=false
             continue
         end
 
-        forward_rate::Float64 = reaction.rate(curr_traj.temperature)
+        forward_rate::Float64 = get_rate(reaction.rates_pfuncs_lerp, curr_traj.temperature)
         if iszero(forward_rate)
             continue
         end
@@ -175,10 +176,11 @@ function fill_photodissociation_ydot!(nd::NetworkData, use_yproposed::Bool=false
         if !haskey(nd.reaction_data.neutroncapture, reactant_idx)
             pfunc_r::Float64 = 1.0
         else
-            pfunc_r = nd.reaction_data.neutroncapture[reactant_idx].pfunc(curr_traj.temperature)
+            reactant = nd.reaction_data.neutroncapture[reactant_idx]
+            pfunc_r = get_pfunc(reactant.rates_pfuncs_lerp, curr_traj.temperature)
         end
         pfunc_n::Float64 = 2.0
-        pfunc_p::Float64 = reaction.pfunc(curr_traj.temperature)
+        pfunc_p::Float64 = get_pfunc(reaction.rates_pfuncs_lerp, curr_traj.temperature)
 
         pfunc::Float64 = pfunc_n * pfunc_p / pfunc_r # FIXME: What about division by zero?
         if iszero(pfunc)
@@ -262,7 +264,7 @@ function fill_jacobian_neutroncapture!(nd::NetworkData, use_yproposed::Bool=fals
 
     # TODO: Convert this to a loop instead of 6 hard coded changes to the jacobian?
     for capture::NeutronCapture in values(nd.reaction_data.neutroncapture)
-        rate::Float64 = capture.rate(curr_traj.temperature)
+        rate::Float64 = get_rate(capture.rates_pfuncs_lerp, curr_traj.temperature)
         if iszero(rate)
             continue
         end
@@ -329,7 +331,7 @@ function fill_jacobian_photodissociation!(nd::NetworkData, use_yproposed::Bool=f
 
     # TODO: Convert this to a loop instead of 6 hard coded changes to the jacobian?
     for reaction::NeutronCapture in values(nd.reaction_data.neutroncapture)
-        forward_rate::Float64 = reaction.rate(curr_traj.temperature)
+        forward_rate::Float64 = get_rate(reaction.rates_pfuncs_lerp, curr_traj.temperature)
         if iszero(forward_rate)
             continue
         end
@@ -354,10 +356,11 @@ function fill_jacobian_photodissociation!(nd::NetworkData, use_yproposed::Bool=f
         if !haskey(nd.reaction_data.neutroncapture, reactant_idx)
             pfunc_r::Float64 = 1.0
         else
-            pfunc_r = nd.reaction_data.neutroncapture[reactant_idx].pfunc(curr_traj.temperature)
+            reactant = nd.reaction_data.neutroncapture[reactant_idx]
+            pfunc_r = get_pfunc(reactant.rates_pfuncs_lerp, curr_traj.temperature)
         end
         pfunc_n::Float64 = 2.0
-        pfunc_p::Float64 = reaction.pfunc(curr_traj.temperature)
+        pfunc_p::Float64 = get_pfunc(reaction.rates_pfuncs_lerp, curr_traj.temperature)
 
         pfunc = pfunc_n * pfunc_p / pfunc_r # FIXME: What about division by zero?
         if iszero(pfunc)

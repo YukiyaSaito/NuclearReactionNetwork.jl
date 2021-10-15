@@ -5,8 +5,8 @@ using DataStructures
 using JSON
 using JLD2
 using SparseArrays
-using Interpolations
 using Pardiso
+using ..LinearInterpolations
 using ..Astro
 using ..ReactionTypes
 using ..Network
@@ -279,7 +279,7 @@ function initialize_network_data(path::String)
 
     # Get the trajectory
     println("Reading trajectory...")
-    trajectory::Trajectory = load_object(j["conditions"]["trajectory"]["path"])
+    trajectory::TrajectoryLerp = load_object(j["conditions"]["trajectory"]["path"])
 
     # Get the initial abundance
     println("Reading initial abundance...")
@@ -293,14 +293,12 @@ function initialize_network_data(path::String)
     println("Reading time data...")
     time::Time = Time(0.0, 1e-15, 0.0)
     if get(j["network"]["start"], "use_trajectory", false)
-        lerped_times = knots(trajectory.temperatures)
-        time.current = lerped_times[1]
+        time.current = trajectory.times[1]
     elseif haskey(j["network"]["start"], "time")
         time.current = j["network"]["start"]["time"]
     end
     if get(j["network"]["stop"], "use_trajectory", false)
-        lerped_times = knots(trajectory.temperatures)
-        time.stop = lerped_times[length(lerped_times)]
+        time.stop = trajectory.times[end]
     elseif haskey(j["network"]["stop"], "time")
         time.stop = j["network"]["stop"]["time"]
     end
