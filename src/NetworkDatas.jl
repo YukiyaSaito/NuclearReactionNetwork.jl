@@ -45,11 +45,15 @@ struct NetworkData
     solver::LinearSolver
 end
 
-function initialize_ydot!(nd::NetworkData)::Vector{Float64}
-    fill!(nd.ydot, 0.0)
+@inbounds function initialize_ydot!(nd::NetworkData)::Vector{Float64}
+    # fill!(nd.ydot, 0.0)
+    Threads.@threads for i in eachindex(nd.ydot)
+        nd.ydot[i] = 0.0
+    end
+    return nd.ydot
 end
 
-function fill_probdecay_ydot!(nd::NetworkData, use_yproposed::Bool=false)::Nothing
+@inbounds function fill_probdecay_ydot!(nd::NetworkData, use_yproposed::Bool=false)::Nothing
     abundance::Vector{Float64} = nd.abundance
     if use_yproposed
         abundance = nd.yproposed
@@ -73,7 +77,7 @@ function fill_probdecay_ydot!(nd::NetworkData, use_yproposed::Bool=false)::Nothi
     end
 end
 
-function fill_neutroncapture_ydot!(nd::NetworkData, use_yproposed::Bool=false)::Nothing
+@inbounds function fill_neutroncapture_ydot!(nd::NetworkData, use_yproposed::Bool=false)::Nothing
     abundance::Vector{Float64} = nd.abundance
     if use_yproposed
         abundance = nd.yproposed
@@ -113,7 +117,7 @@ function fill_neutroncapture_ydot!(nd::NetworkData, use_yproposed::Bool=false)::
     end
 end
 
-function fill_alphadecay_ydot!(nd::NetworkData, use_yproposed::Bool=false)::Nothing
+@inbounds function fill_alphadecay_ydot!(nd::NetworkData, use_yproposed::Bool=false)::Nothing
     abundance::Vector{Float64} = nd.abundance
     if use_yproposed
         abundance = nd.yproposed
@@ -145,7 +149,7 @@ function fill_alphadecay_ydot!(nd::NetworkData, use_yproposed::Bool=false)::Noth
     end
 end
 
-function fill_photodissociation_ydot!(nd::NetworkData, use_yproposed::Bool=false)::Nothing
+@inbounds function fill_photodissociation_ydot!(nd::NetworkData, use_yproposed::Bool=false)::Nothing
     abundance::Vector{Float64} = nd.abundance
     if use_yproposed
         abundance = nd.yproposed
@@ -228,7 +232,7 @@ function update_ydot!(nd::NetworkData; use_yproposed::Bool=false)::Nothing
     end
 end
 
-function fill_jacobian_probdecay!(nd::NetworkData, use_yproposed::Bool=false)::Nothing
+@inbounds function fill_jacobian_probdecay!(nd::NetworkData, use_yproposed::Bool=false)::Nothing
     abundance::Vector{Float64} = nd.abundance
     if use_yproposed
         abundance = nd.yproposed
@@ -251,7 +255,7 @@ function fill_jacobian_probdecay!(nd::NetworkData, use_yproposed::Bool=false)::N
     end
 end
 
-function fill_jacobian_neutroncapture!(nd::NetworkData, use_yproposed::Bool=false)::Nothing
+@inbounds function fill_jacobian_neutroncapture!(nd::NetworkData, use_yproposed::Bool=false)::Nothing
     abundance::Vector{Float64} = nd.abundance
     if use_yproposed
         abundance = nd.yproposed
@@ -299,7 +303,7 @@ function fill_jacobian_neutroncapture!(nd::NetworkData, use_yproposed::Bool=fals
     end
 end
 
-function fill_jacobian_alphadecay!(nd::NetworkData, use_yproposed::Bool=false)::Nothing
+@inbounds function fill_jacobian_alphadecay!(nd::NetworkData, use_yproposed::Bool=false)::Nothing
     abundance::Vector{Float64} = nd.abundance
     if use_yproposed
         abundance = nd.yproposed
@@ -318,7 +322,7 @@ function fill_jacobian_alphadecay!(nd::NetworkData, use_yproposed::Bool=false)::
     end
 end
 
-function fill_jacobian_photodissociation!(nd::NetworkData, use_yproposed::Bool=false)::Nothing
+@inbounds function fill_jacobian_photodissociation!(nd::NetworkData, use_yproposed::Bool=false)::Nothing
     abundance::Vector{Float64} = nd.abundance
     if use_yproposed
         abundance = nd.yproposed
@@ -390,7 +394,7 @@ end
 function fill_jacobian!(nd::NetworkData; use_yproposed::Bool=false)::Vector{Float64}
     # Jacobian coordinate: (reactant, product)
 
-    fill!(nd.jacobian, 0.0)
+    mul!(nd.jacobian, nd.jacobian, 0.0)
 
     if nd.included_reactions.photodissociation
         fill_jacobian_photodissociation!(nd, use_yproposed)
@@ -405,8 +409,8 @@ function fill_jacobian!(nd::NetworkData; use_yproposed::Bool=false)::Vector{Floa
         fill_jacobian_probdecay!(nd, use_yproposed)
     end
 
-    mul!(nd.jacobian, nd.jacobian, -1)
-    nd.jacobian[diagind(nd.jacobian)] .+= 1/nd.time.step
+    mul!(nd.jacobian, nd.jacobian, -1.0)
+    nd.jacobian[diagind(nd.jacobian)] .+= 1.0/nd.time.step
 end
 
 end
