@@ -1,7 +1,6 @@
 import NuclearReactionNetwork as NRN
 using ArgParse
 using DelimitedFiles
-using Interpolations
 using JLD2
 using ProgressBars
 
@@ -46,10 +45,9 @@ function read_ncap(path::String)
                 reactants = collect(zip(z_rs, n_rs))
                 products = collect(zip(z_ps, n_ps))
 
-                rates_lerp = LinearInterpolation(temperature, rates, extrapolation_bc=Flat())
-                pfuncs_lerp = LinearInterpolation(temperature, pfuncs, extrapolation_bc=Flat())
+                rates_pfuncs_lerp = NRN.LinearInterpolations.NcapLerp(temperature, rates, pfuncs)
 
-                push!(ncaps, NRN.NeutronCapture(reactants, products, rates_lerp, pfuncs_lerp, 0.0, missing))
+                push!(ncaps, NRN.NeutronCapture(reactants, products, rates_pfuncs_lerp, 0.0, missing))
             end
         end
     end
@@ -123,9 +121,7 @@ end
 function read_trajectory(path::String)
     trajectory_matrix::Matrix{Float64} = readdlm(path, skipstart=1)
     times, temperatures, densities = eachcol(trajectory_matrix)
-    temperatures_lerp = LinearInterpolation(times, temperatures, extrapolation_bc=Flat())
-    densities_lerp = LinearInterpolation(times, densities, extrapolation_bc=Flat())
-    return NRN.Trajectory(temperatures_lerp, densities_lerp)
+    return NRN.LinearInterpolations.TrajectoryLerp(times, temperatures, densities)
 end
 
 function read_init_comp(path::String)
