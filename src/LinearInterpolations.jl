@@ -18,19 +18,33 @@ struct TrajectoryLerp
     densities::Vector{Float64}
 end
 
+function bisect_right(vec::Vector{Float64}, val::Float64)::Int
+    lo::Int = 1
+    hi::Int = length(vec)
+    while lo < hi
+        mid::Int = div(lo + hi, 2)
+        if val < vec[mid]
+            hi = mid
+        else
+            lo = mid + 1
+        end
+    end
+    return lo
+end
+
 function get_lerp_idxs(vec::Vector{Float64}, val::Float64)::Tuple{Int, Int}
-    right_idx::Int = searchsortedfirst(vec, val)
+    right_idx::Int = bisect_right(vec, val)
     if right_idx == length(vec) + 1
         return (right_idx - 1, right_idx - 1)
-    end
-    if right_idx == 1
+    elseif right_idx == 1
         return (1, 1)
     end
     return (right_idx - 1, right_idx)
 end
 
 function lerp(val1::Float64, val2::Float64, t::Float64)::Float64
-    return val1 + t*(val2 - val1)
+    # TODO: Use fma(t, val2 - val1, val1)?
+    return t*(val2 - val1) + val1
 end
 
 function get_lerp_param(left::Float64, right::Float64, middle::Float64)::Float64
