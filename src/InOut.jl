@@ -1,3 +1,8 @@
+"""
+    InOut
+
+Handles everything to do with input/output for the simulation.
+"""
 module InOut
 
 using DelimitedFiles
@@ -19,12 +24,30 @@ export dump_iteration
 export initialize_network_data
 
 # TODO: Should this be a matrix rather than a series of vectors of the same size (we would lose type inhomogeneity)?
+"""
+    Result
+
+Holds the results of the network calculations.
+
+# Fields:
+- `proton_nums::Vector{Int}`: The proton number of each species.
+- `neutron_nums::Vector{Int}`: The neutron number of each species.
+- `abundance::Vector{Float64}`: The abundance of each species.
+"""
 struct Result
+    """The proton number of each species."""
     proton_nums::Vector{Int}
+    """The neutron number of each species."""
     neutron_nums::Vector{Int}
+    """The abundance of each species."""
     abundance::Vector{Float64} # TODO: Add more things that we can output, like PRISM does
 end
 
+"""
+    Result(nd::NetworkData)::Result
+
+Constructs a [`Result`](@ref) from the data of the network.
+"""
 function Result(nd::NetworkData)::Result
     boundary::Matrix{Int} = nd.net_idx.networkboundary.matrix
 
@@ -41,6 +64,11 @@ function Result(nd::NetworkData)::Result
     return Result(zs, ns, nd.abundance)
 end
 
+"""
+    dump_y(nd::NetworkData)::Nothing
+
+Outputs the abundances of each species to the disk.
+"""
 function dump_y(nd::NetworkData)::Nothing
     result::Result = Result(nd)
     open(nd.output_info.final_y_path, "w") do out_file
@@ -54,6 +82,11 @@ function dump_y(nd::NetworkData)::Nothing
     return nothing
 end
 
+"""
+    dump_y(nd::NetworkData)::Nothing
+
+Outputs the abundances of each mass number to the disk.
+"""
 function dump_ya(nd::NetworkData)::Nothing
     result::Result = Result(nd)
     open(nd.output_info.final_ya_path, "w") do out_file
@@ -72,6 +105,12 @@ function dump_ya(nd::NetworkData)::Nothing
     return nothing
 end
 
+"""
+    dump_result(nd::NetworkData)::Nothing
+
+Outputs the results of the network calculations to the disk. This is usually called at the
+end of network calculation.
+"""
 function dump_result(nd::NetworkData)::Nothing
     if nd.output_info.dump_final_y
         dump_y(nd)
@@ -82,6 +121,12 @@ function dump_result(nd::NetworkData)::Nothing
     return nothing
 end
 
+"""
+    dump_iteration(nd::NetworkData)::Nothing
+
+Outputs the current state of the network calculations to the disk. This is usually called
+after any iteration.
+"""
 function dump_iteration(nd::NetworkData, iteration::Int)::Nothing
     if !nd.output_info.dump_each_iteration
         return
@@ -261,6 +306,11 @@ function get_solver(type::String)
     end
 end
 
+"""
+    initialize_network_data(path::String)
+
+Reads in the control file at `path` and constructs a [`NetworkData`](@ref) from the information provided in the control file.
+"""
 function initialize_network_data(path::String)
     # Parse the JSON control file
     println("Parsing JSON...")
