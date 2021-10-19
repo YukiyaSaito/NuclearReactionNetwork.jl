@@ -106,7 +106,7 @@ end
 """
     Photodissociation
 
-The reverse reaction of a neutronn capture
+The reverse reaction of a neutron capture
 
 # Fields:
 - `q::Float64`: The Q value of the reverse reaction.
