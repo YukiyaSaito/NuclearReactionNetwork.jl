@@ -1,3 +1,8 @@
+"""
+    NetworkSolve
+
+This module is where the actual solving code for the network is held.
+"""
 module NetworkSolve
 using ..Astro
 using ..Network
@@ -41,6 +46,14 @@ function lu_dot!(F::UmfpackLU, S::SparseMatrixCSC{<:UMFVTypes,<:UMFITypes}; chec
     return F
 end
 
+"""
+    newton_raphson_iteration!(nd::NetworkData, Δy::Vector{Float64})::Int
+
+Performs one round of Newton-Raphson.
+
+If the mass fraction of the network fails to be within a certain tolerance, we run keep
+trying by first reducing the time step and doing mmore Newton-Raphson iterations.
+"""
 function newton_raphson_iteration!(nd::NetworkData, Δy::Vector{Float64})::Int
     nd.yproposed .= nd.abundance
     # lu_dot!(F,jacobian); 
@@ -91,10 +104,23 @@ function update_timestep_size!(nd::NetworkData, Δy::Vector{Float64})::Float64
     end
 end
 
+"""
+    clip_abundance!(nd::NetworkData, min_val::Float64=0.0)::Vector{Float64}
+
+Sets all abundances less than or equal to `min_val` to 0.
+"""
 function clip_abundance!(nd::NetworkData, min_val::Float64=0.0)::Vector{Float64}
     nd.abundance[nd.abundance .< min_val] .= 0.0
 end
 
+"""
+    SolveNetwork!(nd::NetworkData)::Nothing
+
+Solves the network from the data in `nd`.
+
+We currently use Newton-Raphson to integrate ``\\vec{\\dot{Y}}``. This is the main
+function of the network solver.
+"""
 function SolveNetwork!(nd::NetworkData)::Nothing
     Δy::Vector{Float64} = Vector{Float64}(undef, length(nd.abundance))
     # F = lu(nd.jacobian)

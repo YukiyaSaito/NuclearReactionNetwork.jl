@@ -1,3 +1,13 @@
+"""
+    LinearInterpolations
+
+Provides functionality to perform linear interpolations.
+
+This module is used to interpolate between the data points provided in both the
+astrophysical data and the temperature-dependent reaction rates. We do this interpolation
+very efficiently by using binary search to find the "knots" (i.e., the points to
+interpolate between) and then use a simple linar interpolation method.
+"""
 module LinearInterpolations
 
 export TrajectoryLerp
@@ -6,15 +16,47 @@ export get_rate
 export get_pfunc
 export get_temp_density
 
+"""
+    NcapLerp
+
+Data to interpolate between for the rates and the partition functions of neutron capture
+reactions.
+
+# Fields
+- `temperatures::Vector{Float64}`: The temperatures at which the rates and partition functions are given.
+- `rates::Vector{Float64}`: The data points for the rates of reactions for neutron captures to interpolate between.
+- `pfuncs::Vector{Float64}`: The data points for the partition function for neutron captures to interpolate between.
+
+See also: [`TrajectoryLerp`](@ref)
+"""
 struct NcapLerp
+    """The temperatures at which the rates and partition functions are given."""
     temperatures::Vector{Float64}
+    """The data points for the rates of reactions for neutron captures to interpolate between."""
     rates::Vector{Float64}
+    """The data points for the partition function for neutron captures to interpolate between."""
     pfuncs::Vector{Float64}
 end
 
+"""
+    TrajectoryLerp
+
+Data to interpolate between for the temperatures and the densities of astrophysical
+trajectories.
+
+# Fields
+- `times::Vector{Float64}`: The times at which the temperatures and partition functions are given.
+- `temperatures::Vector{Float64}`: The data points for the temperatures of the trajectory to interpolate between.
+- `densities::Vector{Float64}`: The data points for the densities of the trajectory to interpolate between.
+
+See also: [`NcapLerp`](@ref)
+"""
 struct TrajectoryLerp
+    """The times at which the temperatures and partition functions are given."""
     times::Vector{Float64}
+    """The data points for the temperatures of the trajectory to interpolate between."""
     temperatures::Vector{Float64}
+    """The data points for the densities of the trajectory to interpolate between."""
     densities::Vector{Float64}
 end
 
@@ -54,6 +96,13 @@ function get_lerp_param(left::Float64, right::Float64, middle::Float64)::Float64
     return (middle - left) / (right - left)
 end
 
+"""
+    get_rate(ncap_lerp::NcapLerp, temp::Float64)::Float64
+
+Return the (linearly) interpolated rate of reaction at the temperature `temp`.
+
+See also: [`get_pfunc`](@ref), [`get_temp_density`](@ref)
+"""
 function get_rate(ncap_lerp::NcapLerp, temp::Float64)::Float64
     idx_left::Int, idx_right::Int = get_lerp_idxs(ncap_lerp.temperatures, temp)
 
@@ -65,6 +114,13 @@ function get_rate(ncap_lerp::NcapLerp, temp::Float64)::Float64
     return rate
 end
 
+"""
+    get_pfunc(ncap_lerp::NcapLerp, temp::Float64)
+
+Return the (linearly) interpolated partition function at the temperature `temp`.
+
+See also: [`get_rate`](@ref), [`get_temp_density`](@ref)
+"""
 function get_pfunc(ncap_lerp::NcapLerp, temp::Float64)::Float64
     idx_left::Int, idx_right::Int = get_lerp_idxs(ncap_lerp.temperatures, temp)
 
@@ -76,6 +132,13 @@ function get_pfunc(ncap_lerp::NcapLerp, temp::Float64)::Float64
     return pfunc
 end
 
+"""
+    get_temp_density(traj_lerp::TrajectoryLerp, time::Float64)
+
+Return the (linearly) interpolated temperature and density at the time `time`.
+
+See also: [`get_rate`](@ref), [`get_pfunc`](@ref)
+"""
 function get_temp_density(traj_lerp::TrajectoryLerp, time::Float64)::Tuple{Float64, Float64}
     idx_left::Int, idx_right::Int = get_lerp_idxs(traj_lerp.times, time)
 

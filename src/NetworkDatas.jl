@@ -1,3 +1,11 @@
+"""
+    NetworkDatas
+
+This module handles everything to do with preparing for the Newton-Raphson iteration. In
+here, we fill up the Jacobian, ``\\mathcal{J}``, as well as ``\\vec{\\dot{Y}}``. The
+main data structure of this module is [`NetworkData`](@ref) which holds all of the
+information needed to solve the network calculations.
+"""
 module NetworkDatas
 
 using ..LinearInterpolations
@@ -15,33 +23,104 @@ export IncludedReactions
 export fill_jacobian!
 export update_ydot!
 
+"""
+    OutputInfo
+
+Holds the data about where we should dump the output of the simulation.
+
+# Fields:
+- `dump_final_y::Bool`: Whether the simulation should output the final abundances for each species
+- `final_y_path::Union{Missing, String}`: The file to which the simulation should output the final abundances for each species
+- `dump_final_ya::Bool`: Whether the simulation should output the final abundances as a function of mass number
+- `final_ya_path::Union{Missing, String}`: The file to which the simulation should output the final abundances as a fucntion of mass number
+- `dump_each_iteration::Bool`: Whether the simulationn should output the abundances of each species at each time step
+- `iteration_output_path::Union{Missing, String}`: The file to which the simulation shoould the abundances of each species at each time step
+"""
 struct OutputInfo
+    """Whether the simulation should output the final abundances for each species"""
     dump_final_y::Bool
+    """The file to which the simulation should output the final abundances for each species"""
     final_y_path::Union{Missing, String}
+    """Whether the simulation should output the final abundances as a function of mass number"""
     dump_final_ya::Bool
+    """The file to which the simulation should output the final abundances as a fucntion of mass number"""
     final_ya_path::Union{Missing, String}
+    """Whether the simulationn should output the abundances of each species at each time step"""
     dump_each_iteration::Bool
+    """The file to which the simulation shoould the abundances of each species at each time step"""
     iteration_output_path::Union{Missing, String}
 end
 
+"""
+    IncludedReactions
+
+Holds the data about which reactions are used in the network.
+
+This structure exists for performance reasons.
+
+# Fields:
+- `ncap::Bool`: Whether neutron captures are included in the network calculations
+- `probdecay::Bool`: Whether probabilistic decays are included in the network calculations
+- `alphadecay::Bool`: Whether ``\\alpha`` decays are included in the network calculations
+- `photodissociation::Bool`: Whether the reverse reaction of neutron captures are included in the network calculations
+"""
 mutable struct IncludedReactions
+    """Whether neutron captures are included in the network calculations"""
     ncap::Bool
+    """Whether probabilistic decays are included in the network calculations"""
     probdecay::Bool
+    """Whether ``\\alpha`` decays are included in the network calculations"""
     alphadecay::Bool
+    """Whether the reverse reaction of neutron captures are included in the network calculations"""
     photodissociation::Bool
 end
 
+"""
+    NetworkData
+
+A conglomerate of all the information needed for the network to run.
+
+This struct should only ever be instantiated as a singleton.
+
+# Fields:
+- `net_idx::NetworkIndex`: Used to check is a species is in a network.
+- `reaction_data::ReactionData`: Holds all of the data used for the reactions (like rates, reactants, products, etc.).
+- `trajectory::TrajectoryLerp`: Holds the data for the astrophysical trajectory to interpolate (like density and temperature).
+- `abundance::Vector{Float64}`: The abundances of each species, indexed using `zn_to_index()`.
+- `yproposed::Vector{Float64}`: The proposed abundances of each species if a Newton-Raphson iteration fails
+- `ydot::Vector{Float64}`: The time derivative of the abundances. The goal of the network solver is to integrate this over time.
+- `time::Time`: The current time, time step, and time at which the simulation should end.
+- `jacobian::SparseMatrixCSC{Float64, Int}`: The Jacobian that we have to invert in order to integrate ``\\vec{\\dot{Y}}``.
+- `output_info::OutputInfo`: Tells us where we should dump the output of the program to.
+- `included_reactions::IncludedReactions`: Used to know if there are reactions that we can skip for performance.
+- `solver::LinearSolver`: The solver used to invert the Jacobian.
+
+See also: [`zn_to_index`](@ref), [`NetworkIndex`](@ref), [`ReactionData`](@ref), [`TrajectoryLerp`](@ref),
+[`Time`](@ref), [`OutputInfo`](@ref), [`IncludedReactions`](@ref),
+[`LinearSolver`](@ref)
+"""
 struct NetworkData
+    """Used to check is a species is in a network."""
     net_idx::NetworkIndex
+    """Holds all of the data used for the reactions (like rates, reactants, products, etc.)."""
     reaction_data::ReactionData
+    """Holds the data for the astrophysical trajectory to interpolate (like density and temperature)."""
     trajectory::TrajectoryLerp
+    """The abundances of each species, indexed using `zn_to_index()`."""
     abundance::Vector{Float64}
+    """The proposed abundances of each species if a Newton-Raphson iteration fails"""
     yproposed::Vector{Float64}
+    """The time derivative of the abundances. The goal of the network solver is to integrate this over time."""
     ydot::Vector{Float64}
+    """The current time, time step, and time at which the simulation should end."""
     time::Time
+    """The Jacobian that we have to invert in order to integrate ``\\vec{\\dot{Y}}``."""
     jacobian::SparseMatrixCSC{Float64, Int}
+    """Tells us where we should dump the output of the program to."""
     output_info::OutputInfo
+    """Used to know if there are reactions that we can skip for performance."""
     included_reactions::IncludedReactions
+    """The solver used to invert the Jacobian."""
     solver::LinearSolver
 end
 
@@ -84,7 +163,11 @@ end
     end
 
     curr_traj::CurrentTrajectory = get_current_trajectory(nd.trajectory, nd.time.current)
-    for capture::NeutronCapture in values(nd.reaction_data.neutroncapture)
+    for capture::Union{Missing, NeutronCapture} in values(nd.reaction_data.neutroncapture)
+        if ismissing(capture)
+            continue
+        end
+
         rate::Float64 = get_rate(capture.rates_pfuncs_lerp, curr_traj.temperature)
         if iszero(rate)
             continue
@@ -156,7 +239,11 @@ end
     end
 
     curr_traj::CurrentTrajectory = get_current_trajectory(nd.trajectory, nd.time.current)
-    for reaction::NeutronCapture in values(nd.reaction_data.neutroncapture)
+    for reaction::Union{Missing, NeutronCapture} in values(nd.reaction_data.neutroncapture)
+        if ismissing(reaction)
+            continue
+        end
+
         q::Union{Missing, Float64} = reaction.q
         if ismissing(reaction.q)
             continue
@@ -177,7 +264,7 @@ end
         end
 
         # Lookup partition function for the reactant
-        if !haskey(nd.reaction_data.neutroncapture, reactant_idx)
+        if ismissing(nd.reaction_data.neutroncapture[reactant_idx])
             pfunc_r::Float64 = 1.0
         else
             reactant = nd.reaction_data.neutroncapture[reactant_idx]
@@ -216,6 +303,15 @@ end
     end
 end
 
+"""
+    update_ydot!(nd::NetworkData; use_yproposed::Bool=false)::Nothing
+
+Fill the vector ``\\vec{\\dot{Y}}`` with the data from the current time-step.
+
+The flag `use_yproposed` is used to determine whether the network should use the abundances
+held in `nd.abundance` or `nd.yproposed`. The latter should be used for an iteration that
+failed to converge after a Newton-Raphson iteration.
+"""
 function update_ydot!(nd::NetworkData; use_yproposed::Bool=false)::Nothing
     initialize_ydot!(nd)
     if nd.included_reactions.photodissociation
@@ -267,7 +363,11 @@ end
     end
 
     # TODO: Convert this to a loop instead of 6 hard coded changes to the jacobian?
-    for capture::NeutronCapture in values(nd.reaction_data.neutroncapture)
+    for capture::Union{Missing, NeutronCapture} in values(nd.reaction_data.neutroncapture)
+        if ismissing(capture)
+            continue
+        end
+
         rate::Float64 = get_rate(capture.rates_pfuncs_lerp, curr_traj.temperature)
         if iszero(rate)
             continue
@@ -334,7 +434,11 @@ end
     end
 
     # TODO: Convert this to a loop instead of 6 hard coded changes to the jacobian?
-    for reaction::NeutronCapture in values(nd.reaction_data.neutroncapture)
+    for reaction::Union{Missing, NeutronCapture} in values(nd.reaction_data.neutroncapture)
+        if ismissing(reaction)
+            continue
+        end
+
         forward_rate::Float64 = get_rate(reaction.rates_pfuncs_lerp, curr_traj.temperature)
         if iszero(forward_rate)
             continue
@@ -357,7 +461,7 @@ end
         product_idx::Int = zn_to_index(z_p, n_p, nd.net_idx)
 
         # Lookup partition function for the reactant (product of the forward reaction)
-        if !haskey(nd.reaction_data.neutroncapture, reactant_idx)
+        if ismissing(nd.reaction_data.neutroncapture[reactant_idx])
             pfunc_r::Float64 = 1.0
         else
             reactant = nd.reaction_data.neutroncapture[reactant_idx]
@@ -391,6 +495,15 @@ end
     end
 end
 
+"""
+    fill_jacobian!(nd::NetworkData; use_yproposed::Bool=false)::Vector{Float64}
+
+Fill Jacobian with the data from the current time-step.
+
+The flag `use_yproposed` is used to determine whether the network should use the abundances
+held in `nd.abundance` or `nd.yproposed`. The latter should be used for an iteration that
+failed to converge after a Newton-Raphson iteration.
+"""
 function fill_jacobian!(nd::NetworkData; use_yproposed::Bool=false)::Vector{Float64}
     # Jacobian coordinate: (reactant, product)
 

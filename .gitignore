@@ -5,6 +5,7 @@
 *.jl.*.mem
 statprof/
 Manifest.toml
+docs/build
 
 ### VisualStudioCode ###
 .vscode/*

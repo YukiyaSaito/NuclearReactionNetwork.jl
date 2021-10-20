@@ -1,3 +1,8 @@
+"""
+    InOut
+
+Handles everything to do with input/output for the simulation.
+"""
 module InOut
 
 using DelimitedFiles
@@ -19,12 +24,30 @@ export dump_iteration
 export initialize_network_data
 
 # TODO: Should this be a matrix rather than a series of vectors of the same size (we would lose type inhomogeneity)?
+"""
+    Result
+
+Holds the results of the network calculations.
+
+# Fields:
+- `proton_nums::Vector{Int}`: The proton number of each species.
+- `neutron_nums::Vector{Int}`: The neutron number of each species.
+- `abundance::Vector{Float64}`: The abundance of each species.
+"""
 struct Result
+    """The proton number of each species."""
     proton_nums::Vector{Int}
+    """The neutron number of each species."""
     neutron_nums::Vector{Int}
+    """The abundance of each species."""
     abundance::Vector{Float64} # TODO: Add more things that we can output, like PRISM does
 end
 
+"""
+    Result(nd::NetworkData)::Result
+
+Constructs a [`Result`](@ref) from the data of the network.
+"""
 function Result(nd::NetworkData)::Result
     boundary::Matrix{Int} = nd.net_idx.networkboundary.matrix
 
@@ -41,6 +64,11 @@ function Result(nd::NetworkData)::Result
     return Result(zs, ns, nd.abundance)
 end
 
+"""
+    dump_y(nd::NetworkData)::Nothing
+
+Outputs the abundances of each species to the disk.
+"""
 function dump_y(nd::NetworkData)::Nothing
     result::Result = Result(nd)
     open(nd.output_info.final_y_path, "w") do out_file
@@ -54,6 +82,11 @@ function dump_y(nd::NetworkData)::Nothing
     return nothing
 end
 
+"""
+    dump_y(nd::NetworkData)::Nothing
+
+Outputs the abundances of each mass number to the disk.
+"""
 function dump_ya(nd::NetworkData)::Nothing
     result::Result = Result(nd)
     open(nd.output_info.final_ya_path, "w") do out_file
@@ -72,6 +105,12 @@ function dump_ya(nd::NetworkData)::Nothing
     return nothing
 end
 
+"""
+    dump_result(nd::NetworkData)::Nothing
+
+Outputs the results of the network calculations to the disk. This is usually called at the
+end of network calculation.
+"""
 function dump_result(nd::NetworkData)::Nothing
     if nd.output_info.dump_final_y
         dump_y(nd)
@@ -82,6 +121,12 @@ function dump_result(nd::NetworkData)::Nothing
     return nothing
 end
 
+"""
+    dump_iteration(nd::NetworkData)::Nothing
+
+Outputs the current state of the network calculations to the disk. This is usually called
+after any iteration.
+"""
 function dump_iteration(nd::NetworkData, iteration::Int)::Nothing
     if !nd.output_info.dump_each_iteration
         return
@@ -107,7 +152,7 @@ function read_boundary(path::String)::Nothing
     fill_boundary(raw_boundary)
 end
 
-function read_ncap!(reaction_data::ReactionData, path::String, net_idx::NetworkIndex)::Nothing
+function read_ncap!(ncap_dict::Dict{Int, NeutronCapture}, path::String, net_idx::NetworkIndex)::Nothing
     ncaps::Vector{NeutronCapture} = load_object(path)
     for ncap::NeutronCapture in ncaps
         # Make sure every species involved in the reaction is in the network
@@ -126,7 +171,7 @@ function read_ncap!(reaction_data::ReactionData, path::String, net_idx::NetworkI
         # Add the reaction to the dictionary
         z_p::Int, n_p::Int = ncap.product[1]
         product_idx::Int = zn_to_index(z_p, n_p, net_idx)
-        reaction_data.neutroncapture[product_idx] = ncap
+        ncap_dict[product_idx] = ncap
     end
 end
 
@@ -186,7 +231,7 @@ function read_alphadecay!(reaction_data::ReactionData, path::String, net_idx::Ne
     end
 end
 
-function read_photodissociation!(reaction_data::ReactionData, path::String, net_idx::NetworkIndex)::Nothing
+function read_photodissociation!(ncap_dict::Dict{Int, NeutronCapture}, path::String, net_idx::NetworkIndex)::Nothing
     photodissociation_dict::Dict{Tuple{Int, Int}, Photodissociation} = load_object(path)
     for (reactant::Tuple{Int, Int}, photodissociation::Photodissociation) in photodissociation_dict
         z_r::Int, n_r::Int = reactant
@@ -197,23 +242,23 @@ function read_photodissociation!(reaction_data::ReactionData, path::String, net_
         reactant_idx::Int = zn_to_index(z_r, n_r, net_idx)
 
         # Make sure we have the forward rate associated with this reverse rate
-        if !haskey(reaction_data.neutroncapture, reactant_idx)
+        if !haskey(ncap_dict, reactant_idx)
             continue
         end
-        ncap::NeutronCapture = reaction_data.neutroncapture[reactant_idx]
+        ncap::NeutronCapture = ncap_dict[reactant_idx]
 
         # Add the q value to the neutroncapture
         ncap.q = photodissociation.q
     end
 end
 
-function read_dataset!(reaction_data::ReactionData, included_reactions::IncludedReactions, dataset::DataStructures.OrderedDict{String, Any}, net_idx::NetworkIndex)
+function read_dataset!(reaction_data::ReactionData, ncap_dict::Dict{Int, NeutronCapture}, included_reactions::IncludedReactions, dataset::DataStructures.OrderedDict{String, Any}, net_idx::NetworkIndex)
     if !get(dataset, "active", false)
         return
     end
     if dataset["rxn_type"] == "ncap"
         println("Reading neutron capture...")
-        read_ncap!(reaction_data, dataset["path"], net_idx)
+        read_ncap!(ncap_dict, dataset["path"], net_idx)
         included_reactions.ncap = true
     elseif dataset["rxn_type"] == "probdecay"
         println("Reading beta decay...")
@@ -225,7 +270,7 @@ function read_dataset!(reaction_data::ReactionData, included_reactions::Included
         included_reactions.alphadecay = true
     elseif dataset["rxn_type"] == "photodissociation"
         println("Reading photodissociation...")
-        read_photodissociation!(reaction_data, dataset["path"], net_idx)
+        read_photodissociation!(ncap_dict, dataset["path"], net_idx)
         included_reactions.photodissociation = true
     else
         error("Unknown reaction type: $(dataset["rxn_type"])")
@@ -261,6 +306,19 @@ function get_solver(type::String)
     end
 end
 
+function post_process_ncap!(reaction_data::ReactionData, ncap_dict::Dict{Int, NeutronCapture})
+    vec_size = maximum(keys(ncap_dict))
+    reaction_data.neutroncapture = Vector{Union{Missing, NeutronCapture}}(missing, vec_size)
+    for (idx, ncap) in ncap_dict
+        reaction_data.neutroncapture[idx] = ncap
+    end
+end
+
+"""
+    initialize_network_data(path::String)
+
+Reads in the control file at `path` and constructs a [`NetworkData`](@ref) from the information provided in the control file.
+"""
 function initialize_network_data(path::String)
     # Parse the JSON control file
     println("Parsing JSON...")
@@ -272,10 +330,12 @@ function initialize_network_data(path::String)
 
     # Get the reaction data
     reaction_data::ReactionData = initialize_reactions()
+    ncap_dict::Dict{Int, NeutronCapture} = Dict{Int, NeutronCapture}()
     included_reactions::IncludedReactions = IncludedReactions(false, false, false, false)
     for dataset in j["reactions"]
-        read_dataset!(reaction_data, included_reactions, dataset, net_idx)
+        read_dataset!(reaction_data, ncap_dict, included_reactions, dataset, net_idx)
     end
+    post_process_ncap!(reaction_data, ncap_dict)
 
     # Get the trajectory
     println("Reading trajectory...")
