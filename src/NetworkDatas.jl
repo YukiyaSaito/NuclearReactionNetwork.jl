@@ -163,7 +163,11 @@ end
     end
 
     curr_traj::CurrentTrajectory = get_current_trajectory(nd.trajectory, nd.time.current)
-    for capture::NeutronCapture in values(nd.reaction_data.neutroncapture)
+    for capture::Union{Missing, NeutronCapture} in values(nd.reaction_data.neutroncapture)
+        if ismissing(capture)
+            continue
+        end
+
         rate::Float64 = get_rate(capture.rates_pfuncs_lerp, curr_traj.temperature)
         if iszero(rate)
             continue
@@ -235,7 +239,11 @@ end
     end
 
     curr_traj::CurrentTrajectory = get_current_trajectory(nd.trajectory, nd.time.current)
-    for reaction::NeutronCapture in values(nd.reaction_data.neutroncapture)
+    for reaction::Union{Missing, NeutronCapture} in values(nd.reaction_data.neutroncapture)
+        if ismissing(reaction)
+            continue
+        end
+
         q::Union{Missing, Float64} = reaction.q
         if ismissing(reaction.q)
             continue
@@ -256,7 +264,7 @@ end
         end
 
         # Lookup partition function for the reactant
-        if !haskey(nd.reaction_data.neutroncapture, reactant_idx)
+        if ismissing(nd.reaction_data.neutroncapture[reactant_idx])
             pfunc_r::Float64 = 1.0
         else
             reactant = nd.reaction_data.neutroncapture[reactant_idx]
@@ -355,7 +363,11 @@ end
     end
 
     # TODO: Convert this to a loop instead of 6 hard coded changes to the jacobian?
-    for capture::NeutronCapture in values(nd.reaction_data.neutroncapture)
+    for capture::Union{Missing, NeutronCapture} in values(nd.reaction_data.neutroncapture)
+        if ismissing(capture)
+            continue
+        end
+
         rate::Float64 = get_rate(capture.rates_pfuncs_lerp, curr_traj.temperature)
         if iszero(rate)
             continue
@@ -422,7 +434,11 @@ end
     end
 
     # TODO: Convert this to a loop instead of 6 hard coded changes to the jacobian?
-    for reaction::NeutronCapture in values(nd.reaction_data.neutroncapture)
+    for reaction::Union{Missing, NeutronCapture} in values(nd.reaction_data.neutroncapture)
+        if ismissing(reaction)
+            continue
+        end
+
         forward_rate::Float64 = get_rate(reaction.rates_pfuncs_lerp, curr_traj.temperature)
         if iszero(forward_rate)
             continue
@@ -445,7 +461,7 @@ end
         product_idx::Int = zn_to_index(z_p, n_p, nd.net_idx)
 
         # Lookup partition function for the reactant (product of the forward reaction)
-        if !haskey(nd.reaction_data.neutroncapture, reactant_idx)
+        if ismissing(nd.reaction_data.neutroncapture[reactant_idx])
             pfunc_r::Float64 = 1.0
         else
             reactant = nd.reaction_data.neutroncapture[reactant_idx]

@@ -121,15 +121,18 @@ end
 A collection of all the reaction data in the network
 
 # Fields
-- `probdecay::Vector{ProbDecay}`: The probabilistic decays in the network
-- `neutroncapture::Dict{Int, NeutronCapture}`: The neutron captures in the network, indexed by `zn_to_index()`
-- `alphadecay::Vector{AlphaDecay}`: The alpha decays in the network.
+- `probdecay::Vector{ProbDecay}`: The probabilistic decays in the network, indexed byb `zn_to_index()`.
+- `neutroncapture::Vec{Union{NeutronCapture}}`: The neutron captures in the network, indexed by `zn_to_index()`.
+- `alphadecay::Vector{AlphaDecay}`: The alpha decays in the network, indexed by `zn_to_index()`.
 
 See also: [`zn_to_index`](@ref)
 """
 mutable struct ReactionData
+    """The probabilistic decays in the network, indexed byb `zn_to_index()`."""
     probdecay::Vector{ProbDecay}
-    neutroncapture::Dict{Int, NeutronCapture}
+    """The neutron captures in the network, indexed by `zn_to_index()`."""
+    neutroncapture::Vector{Union{Missing, NeutronCapture}}
+    """The alpha decays in the network, indexed by `zn_to_index()`."""
     alphadecay::Vector{AlphaDecay}
 end
 
@@ -142,9 +145,9 @@ See also: [`ReactionData`](@ref)
 """
 function initialize_reactions()
     probdecay = Vector{ProbDecay}()
-    ncap_dict = Dict{Int, NeutronCapture}()
+    ncap = Vector{Union{Missing, NeutronCapture}}()
     alphadecay = Vector{AlphaDecay}()
-    return ReactionData(probdecay, ncap_dict, alphadecay)
+    return ReactionData(probdecay, ncap, alphadecay)
 end
 
 end

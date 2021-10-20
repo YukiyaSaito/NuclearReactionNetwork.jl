@@ -152,7 +152,7 @@ function read_boundary(path::String)::Nothing
     fill_boundary(raw_boundary)
 end
 
-function read_ncap!(reaction_data::ReactionData, path::String, net_idx::NetworkIndex)::Nothing
+function read_ncap!(ncap_dict::Dict{Int, NeutronCapture}, path::String, net_idx::NetworkIndex)::Nothing
     ncaps::Vector{NeutronCapture} = load_object(path)
     for ncap::NeutronCapture in ncaps
         # Make sure every species involved in the reaction is in the network
@@ -171,7 +171,7 @@ function read_ncap!(reaction_data::ReactionData, path::String, net_idx::NetworkI
         # Add the reaction to the dictionary
         z_p::Int, n_p::Int = ncap.product[1]
         product_idx::Int = zn_to_index(z_p, n_p, net_idx)
-        reaction_data.neutroncapture[product_idx] = ncap
+        ncap_dict[product_idx] = ncap
     end
 end
 
@@ -231,7 +231,7 @@ function read_alphadecay!(reaction_data::ReactionData, path::String, net_idx::Ne
     end
 end
 
-function read_photodissociation!(reaction_data::ReactionData, path::String, net_idx::NetworkIndex)::Nothing
+function read_photodissociation!(ncap_dict::Dict{Int, NeutronCapture}, path::String, net_idx::NetworkIndex)::Nothing
     photodissociation_dict::Dict{Tuple{Int, Int}, Photodissociation} = load_object(path)
     for (reactant::Tuple{Int, Int}, photodissociation::Photodissociation) in photodissociation_dict
         z_r::Int, n_r::Int = reactant
@@ -242,23 +242,23 @@ function read_photodissociation!(reaction_data::ReactionData, path::String, net_
         reactant_idx::Int = zn_to_index(z_r, n_r, net_idx)
 
         # Make sure we have the forward rate associated with this reverse rate
-        if !haskey(reaction_data.neutroncapture, reactant_idx)
+        if !haskey(ncap_dict, reactant_idx)
             continue
         end
-        ncap::NeutronCapture = reaction_data.neutroncapture[reactant_idx]
+        ncap::NeutronCapture = ncap_dict[reactant_idx]
 
         # Add the q value to the neutroncapture
         ncap.q = photodissociation.q
     end
 end
 
-function read_dataset!(reaction_data::ReactionData, included_reactions::IncludedReactions, dataset::DataStructures.OrderedDict{String, Any}, net_idx::NetworkIndex)
+function read_dataset!(reaction_data::ReactionData, ncap_dict::Dict{Int, NeutronCapture}, included_reactions::IncludedReactions, dataset::DataStructures.OrderedDict{String, Any}, net_idx::NetworkIndex)
     if !get(dataset, "active", false)
         return
     end
     if dataset["rxn_type"] == "ncap"
         println("Reading neutron capture...")
-        read_ncap!(reaction_data, dataset["path"], net_idx)
+        read_ncap!(ncap_dict, dataset["path"], net_idx)
         included_reactions.ncap = true
     elseif dataset["rxn_type"] == "probdecay"
         println("Reading beta decay...")
@@ -270,7 +270,7 @@ function read_dataset!(reaction_data::ReactionData, included_reactions::Included
         included_reactions.alphadecay = true
     elseif dataset["rxn_type"] == "photodissociation"
         println("Reading photodissociation...")
-        read_photodissociation!(reaction_data, dataset["path"], net_idx)
+        read_photodissociation!(ncap_dict, dataset["path"], net_idx)
         included_reactions.photodissociation = true
     else
         error("Unknown reaction type: $(dataset["rxn_type"])")
@@ -306,6 +306,14 @@ function get_solver(type::String)
     end
 end
 
+function post_process_ncap!(reaction_data::ReactionData, ncap_dict::Dict{Int, NeutronCapture})
+    vec_size = maximum(keys(ncap_dict))
+    reaction_data.neutroncapture = Vector{Union{Missing, NeutronCapture}}(missing, vec_size)
+    for (idx, ncap) in ncap_dict
+        reaction_data.neutroncapture[idx] = ncap
+    end
+end
+
 """
     initialize_network_data(path::String)
 
@@ -322,10 +330,12 @@ function initialize_network_data(path::String)
 
     # Get the reaction data
     reaction_data::ReactionData = initialize_reactions()
+    ncap_dict::Dict{Int, NeutronCapture} = Dict{Int, NeutronCapture}()
     included_reactions::IncludedReactions = IncludedReactions(false, false, false, false)
     for dataset in j["reactions"]
-        read_dataset!(reaction_data, included_reactions, dataset, net_idx)
+        read_dataset!(reaction_data, ncap_dict, included_reactions, dataset, net_idx)
     end
+    post_process_ncap!(reaction_data, ncap_dict)
 
     # Get the trajectory
     println("Reading trajectory...")
