@@ -143,10 +143,13 @@ Check if the pair (`z`, `n`) is in the network.
 """
 function zn_in_network(z::Int, n::Int, net_idx::NetworkIndex)::Bool
     # TODO: Maybe only accept UInts and not Ints?
+    if z == 0 && n == 0 # Special case
+        return true
+    end
     if z+1 > size(net_idx.networkboundary.matrix, 1) || z < 0
         return false
     end
-    return n <= net_idx.networkboundary.matrix[z+1, 3] 
+    return net_idx.networkboundary.matrix[z+1, 2] <= n <= net_idx.networkboundary.matrix[z+1, 3] 
 end
 
 end
