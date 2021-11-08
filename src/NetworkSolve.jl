@@ -139,7 +139,7 @@ function SolveNetwork!(nd::NetworkData)::Nothing
         fill_jacobian!(nd)
         update_ydot!(nd)
         
-        @printf "Time: %e,\tTime step: %e,\tIteration #: %d,\tFailed Iterations: %d,\tAvg. Iterations/Timestep: %f\n" nd.time.current nd.time.step iteration failed_iterations (failed_iterations + iteration)/iteration
+        # @printf "Time: %e,\tTime step: %e,\tIteration #: %d,\tFailed Iterations: %d,\tAvg. Iterations/Timestep: %f\n" nd.time.current nd.time.step iteration failed_iterations (failed_iterations + iteration)/iteration
         dump_iteration(nd, iteration)
     end
 end

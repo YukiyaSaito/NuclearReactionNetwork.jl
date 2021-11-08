@@ -10,6 +10,7 @@ using DataStructures
 using JSON
 using JLD2
 using SparseArrays
+using StaticArrays
 using Pardiso
 using ..LinearInterpolations
 using ..Astro
@@ -152,9 +153,9 @@ function read_boundary(path::String)::Nothing
     fill_boundary(raw_boundary)
 end
 
-function read_ncap!(ncap_dict::Dict{Int, NeutronCapture}, path::String, net_idx::NetworkIndex)::Nothing
-    ncaps::Vector{NeutronCapture} = load_object(path)
-    for ncap::NeutronCapture in ncaps
+function read_ncap!(ncap_dict::Dict{Int, NeutronCaptureIO}, path::String, net_idx::NetworkIndex)::Nothing
+    ncaps::Vector{NeutronCaptureIO} = load_object(path)
+    for ncap::NeutronCaptureIO in ncaps
         # Make sure every species involved in the reaction is in the network
         out_of_network::Bool = false
         for species::Tuple{Int, Int} in [ncap.product; ncap.reactant]
@@ -176,8 +177,8 @@ function read_ncap!(ncap_dict::Dict{Int, NeutronCapture}, path::String, net_idx:
 end
 
 function read_probdecay!(reaction_data::ReactionData, path::String, net_idx::NetworkIndex)::Nothing
-    probdecay::Vector{ProbDecay} = load_object(path)
-    for decay::ProbDecay in probdecay
+    probdecay::Vector{ProbDecayIO} = load_object(path)
+    for decay::ProbDecayIO in probdecay
         # Make sure every species involved in the reaction is in the network
         out_of_network::Bool = false
         for species::Tuple{Int, Int} in [decay.product; decay.reactant]
@@ -191,21 +192,25 @@ function read_probdecay!(reaction_data::ReactionData, path::String, net_idx::Net
             continue
         end
 
+        reactant_idxs = SVector{1, Int}(zn_to_index(decay.reactant[1][1], decay.reactant[1][2], net_idx))
+        product_idxs = SVector{6, Int}([zn_to_index(product[1], product[2], net_idx) for product in decay.product])
+        real_decay = ProbDecay(reactant_idxs, product_idxs, decay.rate, decay.average_number)
+
         # Check if we already have this reaction in the network
-        idx::Union{Nothing, Int} = findfirst(other -> check_eq_reaction(decay, other), reaction_data.probdecay)
+        idx::Union{Nothing, Int} = findfirst(other -> check_eq_reaction(real_decay, other), reaction_data.probdecay)
         if !isnothing(idx)
             # Replace the old data
-            reaction_data.probdecay[idx] = decay
+            reaction_data.probdecay[idx] = real_decay
         else
             # Add the reaction to the array
-            push!(reaction_data.probdecay, decay)
+            push!(reaction_data.probdecay, real_decay)
         end
     end
 end
 
 function read_alphadecay!(reaction_data::ReactionData, path::String, net_idx::NetworkIndex)::Nothing
-    alphadecay::Vector{AlphaDecay} = load_object(path)
-    for decay::AlphaDecay in alphadecay
+    alphadecay::Vector{AlphaDecayIO} = load_object(path)
+    for decay::AlphaDecayIO in alphadecay
         # Make sure every species involved in the reaction is in the network
         out_of_network::Bool = false
         for species::Tuple{Int, Int} in [decay.product; decay.reactant]
@@ -219,19 +224,23 @@ function read_alphadecay!(reaction_data::ReactionData, path::String, net_idx::Ne
             continue
         end
 
+        reactant_idx = zn_to_index(decay.reactant[1], decay.reactant[2], net_idx)
+        product_idxs = SVector{2, Int}([zn_to_index(product[1], product[2], net_idx) for product in decay.product])
+        real_decay = AlphaDecay(reactant_idx, product_idxs, decay.rate)
+
         # Check if we already have this reaction in the network
-        idx::Union{Nothing, Int} = findfirst(other -> check_eq_reaction(decay, other), reaction_data.alphadecay)
+        idx::Union{Nothing, Int} = findfirst(other -> check_eq_reaction(real_decay, other), reaction_data.alphadecay)
         if !isnothing(idx)
             # Replace the old data
-            reaction_data.prodecay[idx] = decay
+            reaction_data.alphadecay[idx] = real_decay
         else
             # Add the reaction to the array
-            push!(reaction_data.alphadecay, decay)
+            push!(reaction_data.alphadecay, real_decay)
         end
     end
 end
 
-function read_photodissociation!(ncap_dict::Dict{Int, NeutronCapture}, path::String, net_idx::NetworkIndex)::Nothing
+function read_photodissociation!(ncap_dict::Dict{Int, NeutronCaptureIO}, path::String, net_idx::NetworkIndex)::Nothing
     photodissociation_dict::Dict{Tuple{Int, Int}, Photodissociation} = load_object(path)
     for (reactant::Tuple{Int, Int}, photodissociation::Photodissociation) in photodissociation_dict
         z_r::Int, n_r::Int = reactant
@@ -245,14 +254,14 @@ function read_photodissociation!(ncap_dict::Dict{Int, NeutronCapture}, path::Str
         if !haskey(ncap_dict, reactant_idx)
             continue
         end
-        ncap::NeutronCapture = ncap_dict[reactant_idx]
+        ncap::NeutronCaptureIO = ncap_dict[reactant_idx]
 
         # Add the q value to the neutroncapture
         ncap.q = photodissociation.q
     end
 end
 
-function read_dataset!(reaction_data::ReactionData, ncap_dict::Dict{Int, NeutronCapture}, included_reactions::IncludedReactions, dataset::DataStructures.OrderedDict{String, Any}, net_idx::NetworkIndex)
+function read_dataset!(reaction_data::ReactionData, ncap_dict::Dict{Int, NeutronCaptureIO}, included_reactions::IncludedReactions, dataset::DataStructures.OrderedDict{String, Any}, net_idx::NetworkIndex)
     if !get(dataset, "active", false)
         return
     end
@@ -306,11 +315,22 @@ function get_solver(type::String)
     end
 end
 
-function post_process_ncap!(reaction_data::ReactionData, ncap_dict::Dict{Int, NeutronCapture})
+function post_process_ncap!(reaction_data::ReactionData, ncap_dict::Dict{Int, NeutronCaptureIO}, net_idx::NetworkIndex)
     vec_size = maximum(keys(ncap_dict))
-    reaction_data.neutroncapture = Vector{Union{Missing, NeutronCapture}}(missing, vec_size)
+    reaction_data.neutroncapture = Vector{Union{Nothing, NeutronCapture}}(nothing, vec_size)
     for (idx, ncap) in ncap_dict
-        reaction_data.neutroncapture[idx] = ncap
+        if isnothing(ncap)
+            real_ncap = nothing
+        else
+            reactant_idxs = SVector{2, Int}([zn_to_index(reactant[1], reactant[2], net_idx) for reactant in ncap.reactant])
+            product_idxs = SVector{1, Int}([zn_to_index(product[1], product[2], net_idx) for product in ncap.product])
+            A_r = 0 + 1 + ncap.product[1][1] + ncap.product[1][2]
+            A_n = 0 + 1
+            A_p = ncap.reactant[2][1] + ncap.reactant[2][2]
+            A_factor = (A_n*A_p/A_r)^(3/2)
+            real_ncap = NeutronCapture(reactant_idxs, product_idxs, ncap.rates_pfuncs_lerp, ncap.q, A_factor)
+        end
+        reaction_data.neutroncapture[idx] = real_ncap
     end
 end
 
@@ -330,12 +350,12 @@ function initialize_network_data(path::String)
 
     # Get the reaction data
     reaction_data::ReactionData = initialize_reactions()
-    ncap_dict::Dict{Int, NeutronCapture} = Dict{Int, NeutronCapture}()
+    ncap_dict::Dict{Int, NeutronCaptureIO} = Dict{Int, NeutronCaptureIO}()
     included_reactions::IncludedReactions = IncludedReactions(false, false, false, false)
     for dataset in j["reactions"]
         read_dataset!(reaction_data, ncap_dict, included_reactions, dataset, net_idx)
     end
-    post_process_ncap!(reaction_data, ncap_dict)
+    post_process_ncap!(reaction_data, ncap_dict, net_idx)
 
     # Get the trajectory
     println("Reading trajectory...")

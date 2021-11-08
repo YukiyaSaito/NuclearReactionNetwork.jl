@@ -125,10 +125,10 @@ struct NetworkData
 end
 
 @inbounds function initialize_ydot!(nd::NetworkData)::Vector{Float64}
-    # fill!(nd.ydot, 0.0)
-    Threads.@threads for i in eachindex(nd.ydot)
-        nd.ydot[i] = 0.0
-    end
+    fill!(nd.ydot, 0.0)
+    # Threads.@threads for i in eachindex(nd.ydot)
+    #     nd.ydot[i] = 0.0
+    # end
     return nd.ydot
 end
 
@@ -139,8 +139,7 @@ end
     end
 
     for decay::ProbDecay in nd.reaction_data.probdecay
-        z_r::Int, n_r::Int = decay.reactant[1]
-        reactant_idx::Int = zn_to_index(z_r, n_r, nd.net_idx)
+        reactant_idx::Int = decay.reactant_idxs[1]
 
         if iszero(decay.rate) || iszero(abundance[reactant_idx])
             continue
@@ -148,9 +147,10 @@ end
 
         nd.ydot[reactant_idx] += -1.0 * decay.rate * abundance[reactant_idx]
 
-        for (product::Tuple{Int, Int}, average_number::Float64) in zip(decay.product, decay.average_number)
-            z_p::Int, n_p::Int = product
-            product_idx::Int = zn_to_index(z_p, n_p, nd.net_idx)
+        for (product_idx::Int, average_number::Float64) in zip(decay.product_idxs, decay.average_number)
+            if iszero(average_number)
+                continue
+            end
             nd.ydot[product_idx] += average_number * decay.rate * abundance[reactant_idx]
         end
     end
@@ -163,8 +163,8 @@ end
     end
 
     curr_traj::CurrentTrajectory = get_current_trajectory(nd.trajectory, nd.time.current)
-    for capture::Union{Missing, NeutronCapture} in values(nd.reaction_data.neutroncapture)
-        if ismissing(capture)
+    for capture::Union{Nothing, NeutronCapture} in nd.reaction_data.neutroncapture
+        if isnothing(capture)
             continue
         end
 
@@ -175,9 +175,7 @@ end
 
         # Grab the product of all the abundances
         abundance_factor::Float64 = 1.0
-        for reactant::Tuple{Int, Int} in capture.reactant
-            z_r::Int, n_r::Int = reactant
-            reactant_idx::Int = zn_to_index(z_r, n_r, nd.net_idx)
+        for reactant_idx::Int in capture.reactant_idxs
             abundance_factor *= abundance[reactant_idx]
         end
         if iszero(abundance_factor)
@@ -185,16 +183,12 @@ end
         end
 
         # Update ydot for the reactants
-        for reactant::Tuple{Int, Int} in capture.reactant
-            z_r::Int, n_r::Int = reactant
-            reactant_idx::Int = zn_to_index(z_r, n_r, nd.net_idx)
+        for reactant_idx::Int in capture.reactant_idxs
             nd.ydot[reactant_idx] += -1.0 * curr_traj.density * rate * abundance_factor
         end
 
         # Update ydot for the products
-        for product::Tuple{Int, Int} in capture.product
-            z_p::Int, n_p::Int = product
-            product_idx::Int = zn_to_index(z_p, n_p, nd.net_idx)
+        for product_idx::Int in capture.product_idxs
             nd.ydot[product_idx] += rate * curr_traj.density * abundance_factor
         end
     end
@@ -213,8 +207,7 @@ end
         end
 
         # Grab the abundace of the reactant
-        z_r::Int, n_r::Int = decay.reactant
-        reactant_idx::Int = zn_to_index(z_r, n_r, nd.net_idx)
+        reactant_idx::Int = decay.reactant_idx
         abundance_factor::Float64 = abundance[reactant_idx]
         if iszero(abundance_factor)
             continue
@@ -224,9 +217,7 @@ end
         nd.ydot[reactant_idx] += -1.0 * rate * abundance_factor
 
         # Update ydot for the products
-        for product::Tuple{Int, Int} in decay.product
-            z_p::Int, n_p::Int = product
-            product_idx::Int = zn_to_index(z_p, n_p, nd.net_idx)
+        for product_idx::Int in decay.product_idxs
             nd.ydot[product_idx] += 1.0 * rate * abundance_factor
         end
     end
@@ -239,13 +230,13 @@ end
     end
 
     curr_traj::CurrentTrajectory = get_current_trajectory(nd.trajectory, nd.time.current)
-    for reaction::Union{Missing, NeutronCapture} in values(nd.reaction_data.neutroncapture)
-        if ismissing(reaction)
+    for reaction::Union{Nothing, NeutronCapture} in nd.reaction_data.neutroncapture
+        if isnothing(reaction)
             continue
         end
 
-        q::Union{Missing, Float64} = reaction.q
-        if ismissing(reaction.q)
+        q::Union{Nothing, Float64} = reaction.q
+        if isnothing(reaction.q)
             continue
         end
 
@@ -255,16 +246,14 @@ end
         end
 
         # Grab the abundace of the reactant
-        z_r::Int, n_r::Int = reaction.product[1]
-        A_r::Int = z_r + n_r
-        reactant_idx::Int = zn_to_index(z_r, n_r, nd.net_idx)
+        reactant_idx::Int = reaction.product_idxs[1]
         abundance_factor::Float64 = abundance[reactant_idx]
         if iszero(abundance_factor)
             continue
         end
 
         # Lookup partition function for the reactant
-        if ismissing(nd.reaction_data.neutroncapture[reactant_idx])
+        if isnothing(nd.reaction_data.neutroncapture[reactant_idx])
             pfunc_r::Float64 = 1.0
         else
             reactant = nd.reaction_data.neutroncapture[reactant_idx]
@@ -279,25 +268,17 @@ end
         end
 
         # Compute the rate of the reaction
-        A_p::Int = 0
-        for product::Tuple{Int, Int} in reaction.reactant
-            z_p::Int, n_p::Int = product
-            A_p += z_p + n_p
-        end
-        A_n::Int = 1
         if q < 0
             reverse_rate::Float64 = 1e16
         else
-            reverse_rate = forward_rate * 9.8678e9 * pfunc * (A_n*A_p/A_r)^(3/2) * curr_traj.temperature^(3/2) * exp(-11.605 * q / curr_traj.temperature)
+            reverse_rate = forward_rate * 9.8678e9 * pfunc * reaction.A_factor * curr_traj.temperature^(3/2) * exp(-11.605 * q / curr_traj.temperature)
         end
 
         # Update ydot for the reactant
         nd.ydot[reactant_idx] += -1.0 * reverse_rate * abundance_factor
 
         # Update ydot for the products
-        for product::Tuple{Int, Int} in reaction.reactant
-            z_p::Int, n_p::Int = product
-            product_idx::Int = zn_to_index(z_p, n_p, nd.net_idx)
+        for product_idx::Int in reaction.reactant_idxs
             nd.ydot[product_idx] += 1.0 * reverse_rate * abundance_factor
         end
     end
@@ -339,13 +320,13 @@ end
             continue
         end
 
-        z_r::Int, n_r::Int = decay.reactant[1]
-        reactant_idx::Int = zn_to_index(z_r, n_r, nd.net_idx)
+        reactant_idx::Int = decay.reactant_idxs[1]
         nd.jacobian[reactant_idx, reactant_idx] += -1.0 * decay.rate
 
-        for (product::Tuple{Int, Int}, average_number::Float64) in zip(decay.product, decay.average_number)
-            z_p::Int, n_p::Int = product
-            product_idx::Int = zn_to_index(z_p, n_p, nd.net_idx)
+        for (product_idx::Int, average_number::Float64) in zip(decay.product_idxs, decay.average_number)
+            if iszero(average_number)
+                continue
+            end
             nd.jacobian[product_idx, reactant_idx] += average_number * decay.rate
         end
     end
@@ -363,8 +344,8 @@ end
     end
 
     # TODO: Convert this to a loop instead of 6 hard coded changes to the jacobian?
-    for capture::Union{Missing, NeutronCapture} in values(nd.reaction_data.neutroncapture)
-        if ismissing(capture)
+    for capture::Union{Nothing, NeutronCapture} in nd.reaction_data.neutroncapture
+        if isnothing(capture)
             continue
         end
 
@@ -378,18 +359,14 @@ end
         neutron_abundance::Float64 = abundance[neutron_idx]
 
         # Reactant index and abundance
-        reactant::Tuple{Int, Int} = capture.reactant[2]
-        z_r::Int, n_r::Int = reactant
-        reactant_idx::Int = zn_to_index(z_r, n_r, nd.net_idx)
+        reactant_idx::Int = capture.reactant_idxs[2]
         reactant_abundance::Float64 = abundance[reactant_idx]
 
         # Product index
-        product::Tuple{Int, Int} = capture.product[1]
-        z_p::Int, n_p::Int = product
-        product_idx::Int = zn_to_index(z_p, n_p, nd.net_idx)
+        product_idx::Int = capture.product_idxs[1]
 
         # Double counting factor TODO: Is this always 1.0?
-        dc_factor::Float64 = reactant_idx == product_idx ? 0.5 : 1.0
+        dc_factor::Float64 = reactant_idx == neutron_idx ? 0.5 : 1.0
 
         # Reactants
         nd.jacobian[reactant_idx, reactant_idx] -= dc_factor * curr_traj.density * rate * neutron_abundance  # J_RR
@@ -410,13 +387,10 @@ end
     end
 
     for decay::AlphaDecay in nd.reaction_data.alphadecay
-        z_r::Int, n_r::Int = decay.reactant
-        reactant_idx::Int = zn_to_index(z_r, n_r, nd.net_idx)
+        reactant_idx::Int = decay.reactant_idx
         nd.jacobian[reactant_idx, reactant_idx] += -1.0 * decay.rate
 
-        for product::Tuple{Int, Int} in decay.product
-            z_p::Int, n_p::Int = product
-            product_idx::Int = zn_to_index(z_p, n_p, nd.net_idx)
+        for product_idx::Int in decay.product_idxs
             nd.jacobian[product_idx, reactant_idx] += decay.rate
         end
     end
@@ -434,8 +408,8 @@ end
     end
 
     # TODO: Convert this to a loop instead of 6 hard coded changes to the jacobian?
-    for reaction::Union{Missing, NeutronCapture} in values(nd.reaction_data.neutroncapture)
-        if ismissing(reaction)
+    for reaction::Union{Nothing, NeutronCapture} in nd.reaction_data.neutroncapture
+        if isnothing(reaction)
             continue
         end
 
@@ -444,24 +418,22 @@ end
             continue
         end
 
-        q::Union{Missing, Float64} = reaction.q
-        if ismissing(q)
+        q::Union{Nothing, Float64} = reaction.q
+        if isnothing(q)
             continue
         end
 
         # Reactant index
-        z_r::Int, n_r::Int = reaction.product[1]
-        reactant_idx::Int = zn_to_index(z_r, n_r, nd.net_idx)
+        reactant_idx::Int = reaction.product_idxs[1]
 
         # Neutron (product) index
         neutron_idx::Int = zn_to_index(Int(0), Int(1), nd.net_idx)
 
         # Product index
-        z_p::Int, n_p::Int = reaction.reactant[2]
-        product_idx::Int = zn_to_index(z_p, n_p, nd.net_idx)
+        product_idx::Int = reaction.reactant_idxs[2]
 
         # Lookup partition function for the reactant (product of the forward reaction)
-        if ismissing(nd.reaction_data.neutroncapture[reactant_idx])
+        if isnothing(nd.reaction_data.neutroncapture[reactant_idx])
             pfunc_r::Float64 = 1.0
         else
             reactant = nd.reaction_data.neutroncapture[reactant_idx]
@@ -475,15 +447,11 @@ end
             continue
         end
 
-        A_n::Int = 1
-        A_p::Int = 0 + 1 + z_p + n_p
-        A_r::Int = z_r + n_r
-
         # Reverse rate
         if q < 0
             reverse_rate::Float64 = 1e16
         else
-            reverse_rate = forward_rate * 9.8678e9 * pfunc * (A_n*A_p/A_r)^(3/2) * curr_traj.temperature^(3/2) * exp(-11.605 * q / curr_traj.temperature)
+            reverse_rate = forward_rate * 9.8678e9 * pfunc * reaction.A_factor * curr_traj.temperature^(3/2) * exp(-11.605 * q / curr_traj.temperature)
         end
 
         # Reactant
