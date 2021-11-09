@@ -3,6 +3,7 @@ using ArgParse
 using DelimitedFiles
 using JLD2
 using ProgressBars
+using StaticArrays
 
 function parse_cli_args()
     settings = ArgParseSettings()
@@ -27,7 +28,7 @@ end
 
 function read_ncap(path::String) 
     # Read Fortran formatted input file for temperature dependent reaction rate. 
-    ncaps = Vector{NRN.NeutronCapture}()
+    ncaps = Vector{NRN.NeutronCaptureIO}()
     open(path) do file
         lines = readlines(file)
         num_entry::Int = parse(Int, lines[1])
@@ -42,12 +43,12 @@ function read_ncap(path::String)
                 rates = [parse(Float64, s) for s in split(lines[6*(i-1)+8])]
                 pfuncs = [parse(Float64, s) for s in split(lines[6*(i-1)+9])]
 
-                reactants = collect(zip(z_rs, n_rs))
-                products = collect(zip(z_ps, n_ps))
+                reactants = SVector{2, Tuple{Int, Int}}(collect(zip(z_rs, n_rs)))
+                products = SVector{1, Tuple{Int, Int}}(collect(zip(z_ps, n_ps)))
 
                 rates_pfuncs_lerp = NRN.LinearInterpolations.NcapLerp(temperature, rates, pfuncs)
 
-                push!(ncaps, NRN.NeutronCapture(reactants, products, rates_pfuncs_lerp, 0.0, missing))
+                push!(ncaps, NRN.NeutronCaptureIO(reactants, products, rates_pfuncs_lerp, 0.0, nothing))
             end
         end
     end
@@ -56,7 +57,7 @@ end
 
 function read_probdecay(path::String) 
     # Read Fortran formatted PRISM input file for probabilistic decay.
-    probdecay = Vector{NRN.ProbDecay}()
+    probdecay = Vector{NRN.ProbDecayIO}()
     open(path) do file
         lines = readlines(file)
         num_entry::Int = parse(Int, lines[1])
@@ -66,12 +67,16 @@ function read_probdecay(path::String)
             z_ps::Vector{Int} = [parse(Int, s) for s in split(lines[6*(i-1)+4])]
             n_ps::Vector{Int} = [parse(Int, s) for s in split(lines[6*(i-1)+5])]
             rate::Float64 = parse(Float64, lines[6*(i-1)+6])
-            average_number::Vector{Float64} = [parse(Float64, s) for s in split(lines[6*(i-1)+7])]
 
-            reactants = collect(zip(z_rs, n_rs))
-            products = collect(zip(z_ps, n_ps))
+            average_number = zeros(Float64, 6)
+            average_number[1:length(z_ps)] = [parse(Float64, s) for s in split(lines[6*(i-1)+7])]
+            average_number = SVector{6, Float64}(average_number)
 
-            push!(probdecay, NRN.ProbDecay(reactants, products, rate, average_number))
+            reactants = SVector{1, Tuple{Int, Int}}(collect(zip(z_rs, n_rs)))
+            products = repeat([(0, 0)], 6)
+            products[1:length(z_ps)] = collect(zip(z_ps, n_ps))
+
+            push!(probdecay, NRN.ProbDecayIO(reactants, products, rate, average_number))
         end
     end
     return probdecay
@@ -79,7 +84,7 @@ end
 
 function read_alphadecay(path::String)
     # Read Fortran formatted input file for temperature dependent reaction rate. 
-    alphadecay = Vector{NRN.AlphaDecay}()
+    alphadecay = Vector{NRN.AlphaDecayIO}()
     open(path) do file
         lines = readlines(file)
         num_entries::Int = parse(Int, lines[1])
@@ -91,9 +96,9 @@ function read_alphadecay(path::String)
             rate = parse(Float64, lines[5*(i-1) + 6])
 
             reactant = (z_r, n_r)
-            product = [(z_p[1], n_p[1]), (z_p[2], n_p[2])]
+            product = SVector{2, Tuple{Int, Int}}([(z_p[1], n_p[1]), (z_p[2], n_p[2])])
 
-            push!(alphadecay, NRN.AlphaDecay(reactant, product, rate))
+            push!(alphadecay, NRN.AlphaDecayIO(reactant, product, rate))
         end
     end
     return alphadecay

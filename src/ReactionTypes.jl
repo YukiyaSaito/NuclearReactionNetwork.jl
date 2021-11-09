@@ -5,14 +5,19 @@ Provides a series of reaction types as well as some functionality for them.
 """
 module ReactionTypes
 
+using StaticArrays
 using ..LinearInterpolations
 using ..Astro
 using ..Network
 
 export ProbDecay
+export ProbDecayIO
 export NeutronCapture
+export NeutronCaptureIO
 export AlphaDecay
+export AlphaDecayIO
 export Photodissociation
+export PhotodissociationIO
 export ReactionData
 export initialize_reactions
 export check_eq_reaction
@@ -36,15 +41,22 @@ Probabilistic decay (like ``\\beta^-``decay)
 - `rate::Float64`: The rate of the reaction.
 - `average_number::Vector{Float64}`: A vector of average numbers of species produced.
 """
-mutable struct ProbDecay <: AbstractReaction
+mutable struct ProbDecayIO <: AbstractReaction
     """A vector of reactants of the form ``[(Z_0, N_0), (Z_1, N_1), ... (Z_n, N_n)]``"""
-    reactant::Vector{Tuple{Int, Int}}
+    reactant::SVector{1, Tuple{Int, Int}}
     """A vector of products of the form ``[(Z_0, N_0), (Z_1, N_1), ... (Z_n, N_n)]``"""
-    product::Vector{Tuple{Int, Int}}
+    product::SVector{6, Tuple{Int, Int}}
     """The rate of the reaction."""
     rate::Float64
     """A vector of average numbers of species produced."""
-    average_number::Vector{Float64}
+    average_number::SVector{6, Float64}
+end
+
+struct ProbDecay <: AbstractReaction
+    reactant_idxs::SVector{1, Int}
+    product_idxs::SVector{6, Int}
+    rate::Float64
+    average_number::SVector{6, Float64}
 end
 
 """
@@ -59,17 +71,25 @@ Neutron capture reaction
 - `current_rate::Float64`: Unused field.
 - `q::Union{Missinng, Float64}`: The Q value of the reverse reactionn. Used for the calculation of the reverse rate.
 """
-mutable struct NeutronCapture <: AbstractReaction # Temperature Dependent Reactions
+mutable struct NeutronCaptureIO <: AbstractReaction # Temperature Dependent Reactions
     """A vector of reactants of the form ``[(Z_0, N_0), (Z_1, N_1), ... (Z_n, N_n)]``"""
-    reactant::Vector{Tuple{Int, Int}}
+    reactant::SVector{2, Tuple{Int, Int}}
     """A vector of products of the form ``[(Z_0, N_0), (Z_1, N_1), ... (Z_n, N_n)]``"""
-    product::Vector{Tuple{Int, Int}}
+    product::SVector{1, Tuple{Int, Int}}
     """The rates and partition function data to be interpolated."""
     rates_pfuncs_lerp::NcapLerp
     """Unused field."""
     current_rate::Float64 
     """The Q value of the reverse reactionn. Used for the calculation of the reverse rate."""
-    q::Union{Missing, Float64}
+    q::Union{Nothing, Float64}
+end
+
+struct NeutronCapture <: AbstractReaction
+    reactant_idxs::SVector{2, Int}
+    product_idxs::SVector{1, Int}
+    rates_pfuncs_lerp::NcapLerp
+    q::Union{Nothing, Float64}
+    A_factor::Float64
 end
 
 """
@@ -82,12 +102,18 @@ end
 - `product::Vector{Tuple{Int, Int}}`: A vector of products of the form ``[(Z_0, N_0), (Z_1, N_1)]``
 - `rate::Float64`: The rate of the reaction.
 """
-mutable struct AlphaDecay <: AbstractReaction
+mutable struct AlphaDecayIO <: AbstractReaction
     """A tuple of reactants of the form ``(Z, N)``"""
     reactant::Tuple{Int, Int}
     """A vector of products of the form ``[(Z_0, N_0), (Z_1, N_1)]``"""
-    product::Vector{Tuple{Int, Int}}
+    product::SVector{2, Tuple{Int, Int}}
     """The rate of the reaction."""
+    rate::Float64
+end
+
+struct AlphaDecay <: AbstractReaction
+    reactant_idx::Int
+    product_idxs::SVector{2, Int}
     rate::Float64
 end
 
@@ -101,6 +127,14 @@ This only checks if the reactants and the products are the same.
 """
 function check_eq_reaction(lhs::AbstractReaction, rhs::AbstractReaction)::Bool
     return (typeof(lhs) == typeof(rhs)) && (lhs.reactant == rhs.reactant) && (lhs.product == rhs.product)
+end
+
+function check_eq_reaction(lhs::AlphaDecay, rhs::AlphaDecay)::Bool
+    return (typeof(lhs) == typeof(rhs)) && (lhs.reactant_idx == rhs.reactant_idx) && (lhs.product_idxs == rhs.product_idxs)
+end
+
+function check_eq_reaction(lhs::ProbDecay, rhs::ProbDecay)::Bool
+    return (typeof(lhs) == typeof(rhs)) && (lhs.reactant_idxs == rhs.reactant_idxs) && (lhs.product_idxs == rhs.product_idxs)
 end
 
 """
@@ -131,7 +165,7 @@ mutable struct ReactionData
     """The probabilistic decays in the network, indexed byb `zn_to_index()`."""
     probdecay::Vector{ProbDecay}
     """The neutron captures in the network, indexed by `zn_to_index()`."""
-    neutroncapture::Vector{Union{Missing, NeutronCapture}}
+    neutroncapture::Vector{Union{Nothing, NeutronCapture}}
     """The alpha decays in the network, indexed by `zn_to_index()`."""
     alphadecay::Vector{AlphaDecay}
 end
@@ -145,7 +179,7 @@ See also: [`ReactionData`](@ref)
 """
 function initialize_reactions()
     probdecay = Vector{ProbDecay}()
-    ncap = Vector{Union{Missing, NeutronCapture}}()
+    ncap = Vector{Union{Nothing, NeutronCapture}}()
     alphadecay = Vector{AlphaDecay}()
     return ReactionData(probdecay, ncap, alphadecay)
 end
