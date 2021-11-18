@@ -44,6 +44,15 @@ function read_ncap(path::String)
                 pfuncs = [parse(Float64, s) for s in split(lines[6*(i-1)+9])]
 
                 reactants = SVector{2, Tuple{Int, Int}}(collect(zip(z_rs, n_rs)))
+                
+                # Place the neutron at the beginning of the reactants
+                if reactants[1] != (0, 1)
+                    reactants = SVector{2, Tuple{Int, Int}}(reactants[2], reactants[1])
+                end
+
+                @assert any(reac->reac==(0, 1), reactants) "None of the reactants in this neutron capture is a neutron"
+                @assert reactants[1] == (0, 1) "The first reactant in this neutron capture is not a neutron"
+
                 products = SVector{1, Tuple{Int, Int}}(collect(zip(z_ps, n_ps)))
 
                 rates_pfuncs_lerp = NRN.LinearInterpolations.NcapLerp(temperature, rates, pfuncs)
@@ -67,14 +76,10 @@ function read_probdecay(path::String)
             z_ps::Vector{Int} = [parse(Int, s) for s in split(lines[6*(i-1)+4])]
             n_ps::Vector{Int} = [parse(Int, s) for s in split(lines[6*(i-1)+5])]
             rate::Float64 = parse(Float64, lines[6*(i-1)+6])
-
-            average_number = zeros(Float64, 6)
-            average_number[1:length(z_ps)] = [parse(Float64, s) for s in split(lines[6*(i-1)+7])]
-            average_number = SVector{6, Float64}(average_number)
+            average_number = [parse(Float64, s) for s in split(lines[6*(i-1)+7])]
 
             reactants = SVector{1, Tuple{Int, Int}}(collect(zip(z_rs, n_rs)))
-            products = repeat([(0, 0)], 6)
-            products[1:length(z_ps)] = collect(zip(z_ps, n_ps))
+            products = collect(zip(z_ps, n_ps))
 
             push!(probdecay, NRN.ProbDecayIO(reactants, products, rate, average_number))
         end
