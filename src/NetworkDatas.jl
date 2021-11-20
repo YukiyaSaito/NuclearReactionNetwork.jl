@@ -237,7 +237,7 @@ end
             continue
         end
 
-        forward_rate::Float64 = get_rate(reaction.rates_pfuncs_lerp, curr_traj.temperature)
+        forward_rate::Float64, pfunc_p::Float64 = get_rate_pfunc(reaction.rates_pfuncs_lerp, curr_traj.temperature)
         if iszero(forward_rate)
             continue
         end
@@ -257,7 +257,6 @@ end
             pfunc_r = get_pfunc(reactant.rates_pfuncs_lerp, curr_traj.temperature)
         end
         pfunc_n::Float64 = 2.0
-        pfunc_p::Float64 = get_pfunc(reaction.rates_pfuncs_lerp, curr_traj.temperature)
 
         pfunc::Float64 = pfunc_n * pfunc_p / pfunc_r # FIXME: What about division by zero?
         if iszero(pfunc)
