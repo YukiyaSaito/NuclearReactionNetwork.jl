@@ -78,6 +78,10 @@ function read_probdecay(path::String)
             rate::Float64 = parse(Float64, lines[6*(i-1)+6])
             average_number = [parse(Float64, s) for s in split(lines[6*(i-1)+7])]
 
+            lhs = sum(z_rs) + sum(n_rs)
+            rhs = sum([average_number * (z_p + n_p) for (average_number, z_p, n_p) in zip(average_number, z_ps, n_ps)])
+            @assert isapprox(lhs, rhs) "Mass number is not conserved for the reaction at line $(6*(i-1) + 2)"
+
             reactants = SVector{1, Tuple{Int, Int}}(collect(zip(z_rs, n_rs)))
             products = collect(zip(z_ps, n_ps))
 
