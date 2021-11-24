@@ -170,9 +170,9 @@ function read_ncap!(reaction_data_io::ReactionDataIO, path::String, net_idx::Net
         end
 
         # Add the reaction to the dictionary
-        z_p::Int, n_p::Int = ncap.product[1]
-        product_idx::Int = zn_to_index(z_p, n_p, net_idx)
-        reaction_data_io.ncap_dict[product_idx] = ncap
+        z_r::Int, n_r::Int = ncap.reactant[2]
+        reactant_idx::Int = zn_to_index(z_r, n_r, net_idx)
+        reaction_data_io.ncap_dict[reactant_idx] = ncap
     end
 end
 
@@ -198,7 +198,8 @@ function read_probdecay!(reaction_data_io::ReactionDataIO, path::String, id::Str
         end
 
         # Check if we already have this reaction in the network
-        idx::Union{Nothing, Int} = findfirst(other -> check_eq_reaction(decay, other[2]), reaction_data_io.probdecay)
+        # idx::Union{Nothing, Int} = findfirst(other -> check_eq_reaction(decay, other[2]), reaction_data_io.probdecay)
+        idx::Union{Nothing, Int} = findfirst(other -> decay.reactant == other[2].reactant && id == other[1], reaction_data_io.probdecay)
         if !isnothing(idx) && reaction_data_io.probdecay[idx][1] == id
             # Replace the old data
             reaction_data_io.probdecay[idx] = (id, decay)
@@ -230,7 +231,8 @@ function read_alphadecay!(reaction_data_io::ReactionDataIO, path::String, net_id
         end
 
         # Check if we already have this reaction in the network
-        idx::Union{Nothing, Int} = findfirst(other -> check_eq_reaction(decay, other), reaction_data_io.alphadecay)
+        # idx::Union{Nothing, Int} = findfirst(other -> check_eq_reaction(decay, other), reaction_data_io.alphadecay)
+        idx::Union{Nothing, Int} = findfirst(other -> decay.reactant == other.reactant, reaction_data_io.alphadecay)
         if !isnothing(idx) # It already was in the network
             # Replace the old data
             reaction_data_io.alphadecay[idx] = decay
@@ -245,17 +247,19 @@ function read_photodissociation!(reaction_data_io::ReactionDataIO, path::String,
     photodissociation_dict::Dict{Tuple{Int, Int}, Photodissociation} = load_object(path)
     for (reactant::Tuple{Int, Int}, photodissociation::Photodissociation) in photodissociation_dict
         z_r::Int, n_r::Int = reactant
-        # Make sure the reactant is in the network
-        if !zn_in_network(z_r, n_r, net_idx)
+        z_p = z_r
+        n_p = n_r - 1
+        # Make sure the product is in the network
+        if !zn_in_network(z_p, n_p, net_idx)
             continue
         end
-        reactant_idx::Int = zn_to_index(z_r, n_r, net_idx)
+        product_idx::Int = zn_to_index(z_p, n_p, net_idx)
 
         # Make sure we have the forward rate associated with this reverse rate
-        if !haskey(reaction_data_io.ncap_dict, reactant_idx)
+        if !haskey(reaction_data_io.ncap_dict, product_idx)
             continue
         end
-        ncap::NeutronCaptureIO = reaction_data_io.ncap_dict[reactant_idx]
+        ncap::NeutronCaptureIO = reaction_data_io.ncap_dict[product_idx]
 
         # Add the q value to the neutroncapture
         ncap.q = photodissociation.q
@@ -332,17 +336,18 @@ function post_process_ncap(ncap_dict::Dict{Int, NeutronCaptureIO}, net_idx::Netw
     vec_size = maximum(keys(ncap_dict))
     ncap_data = Vector{Union{Nothing, NeutronCapture}}(nothing, vec_size)
     for (idx, ncap) in ncap_dict
-        if isnothing(ncap)
-            real_ncap = nothing
-        else
-            reactant_idxs = SVector{2, Int}([zn_to_index(reactant[1], reactant[2], net_idx) for reactant in ncap.reactant])
-            product_idxs = SVector{1, Int}([zn_to_index(product[1], product[2], net_idx) for product in ncap.product])
-            A_r = ncap.product[1][1] + ncap.product[1][2]
-            A_p1 = ncap.reactant[1][1] + ncap.reactant[1][2]
-            A_p2 = ncap.reactant[2][1] + ncap.reactant[2][2]
-            A_factor = (A_p1*A_p2/A_r)^(3/2)
-            real_ncap = NeutronCapture(reactant_idxs, product_idxs, ncap.rates_pfuncs_lerp, ncap.q, A_factor)
+        if isnothing(ncap) || idx > vec_size
+            continue
         end
+
+        reactant_idxs = SVector{2, Int}([zn_to_index(reactant[1], reactant[2], net_idx) for reactant in ncap.reactant])
+        product_idxs = SVector{1, Int}([zn_to_index(product[1], product[2], net_idx) for product in ncap.product])
+        A_r = ncap.product[1][1] + ncap.product[1][2]
+        A_p1 = ncap.reactant[1][1] + ncap.reactant[1][2]
+        A_p2 = ncap.reactant[2][1] + ncap.reactant[2][2]
+        A_factor = (A_p1*A_p2/A_r)^(3/2)
+
+        real_ncap = NeutronCapture(reactant_idxs, product_idxs, ncap.rates_pfuncs_lerp, ncap.q, A_factor)
         ncap_data[idx] = real_ncap
     end
     return ncap_data
