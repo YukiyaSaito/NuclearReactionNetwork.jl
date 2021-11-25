@@ -247,11 +247,11 @@ function read_photodissociation!(reaction_data_io::ReactionDataIO, path::String,
     photodissociation_dict::Dict{Tuple{Int, Int}, Photodissociation} = load_object(path)
     for (reactant::Tuple{Int, Int}, photodissociation::Photodissociation) in photodissociation_dict
         z_r::Int, n_r::Int = reactant
-        # Make sure the reactant is in the network
+        # Make sure the product is in the network
         if !zn_in_network(z_r, n_r-1, net_idx)
             continue
         end
-        reactant_idx::Int = zn_to_index(z_r, n_r-1, net_idx)
+        product_idx::Int = zn_to_index(z_r, n_r-1, net_idx)
 
         # Make sure we have the forward rate associated with this reverse rate
         if !haskey(reaction_data_io.ncap_dict, product_idx)
