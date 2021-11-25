@@ -8,6 +8,7 @@ Manifest.toml
 docs/build
 
 ### VisualStudioCode ###
+.vscode
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
