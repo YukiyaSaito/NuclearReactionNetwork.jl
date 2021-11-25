@@ -250,7 +250,7 @@ end
         end
 
         # Lookup partition function for the reactant
-        if isnothing(nd.reaction_data.neutroncapture[reactant_idx])
+        if reactant_idx > length(nd.reaction_data.neutroncapture) || isnothing(nd.reaction_data.neutroncapture[reactant_idx])
             pfunc_r::Float64 = 1.0
         else
             reactant = nd.reaction_data.neutroncapture[reactant_idx]
@@ -429,7 +429,7 @@ end
         product_idx::Int = reaction.reactant_idxs[2]
 
         # Lookup partition function for the reactant (product of the forward reaction)
-        if isnothing(nd.reaction_data.neutroncapture[reactant_idx])
+        if reactant_idx > length(nd.reaction_data.neutroncapture) || isnothing(nd.reaction_data.neutroncapture[reactant_idx])
             pfunc_r::Float64 = 1.0
         else
             reactant = nd.reaction_data.neutroncapture[reactant_idx]

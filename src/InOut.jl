@@ -170,9 +170,9 @@ function read_ncap!(reaction_data_io::ReactionDataIO, path::String, net_idx::Net
         end
 
         # Add the reaction to the dictionary
-        z_p::Int, n_p::Int = ncap.product[1]
-        product_idx::Int = zn_to_index(z_p, n_p, net_idx)
-        reaction_data_io.ncap_dict[product_idx] = ncap
+        z_r::Int, n_r::Int = ncap.reactant[2]
+        reactant_idx::Int = zn_to_index(z_r, n_r, net_idx)
+        reaction_data_io.ncap_dict[reactant_idx] = ncap
     end
 end
 
@@ -198,8 +198,9 @@ function read_probdecay!(reaction_data_io::ReactionDataIO, path::String, id::Str
         end
 
         # Check if we already have this reaction in the network
-        idx::Union{Nothing, Int} = findfirst(other -> check_eq_reaction(decay, other[2]), reaction_data_io.probdecay)
-        if !isnothing(idx) && reaction_data_io.probdecay[idx][1] == id
+        # idx::Union{Nothing, Int} = findfirst(other -> check_eq_reaction(decay, other[2]), reaction_data_io.probdecay)
+        idx::Union{Nothing, Int} = findfirst(other -> decay.reactant == other[2].reactant && id == other[1], reaction_data_io.probdecay)
+        if !isnothing(idx)
             # Replace the old data
             reaction_data_io.probdecay[idx] = (id, decay)
         else
@@ -230,7 +231,8 @@ function read_alphadecay!(reaction_data_io::ReactionDataIO, path::String, net_id
         end
 
         # Check if we already have this reaction in the network
-        idx::Union{Nothing, Int} = findfirst(other -> check_eq_reaction(decay, other), reaction_data_io.alphadecay)
+        # idx::Union{Nothing, Int} = findfirst(other -> check_eq_reaction(decay, other), reaction_data_io.alphadecay)
+        idx::Union{Nothing, Int} = findfirst(other -> decay.reactant == other.reactant, reaction_data_io.alphadecay)
         if !isnothing(idx) # It already was in the network
             # Replace the old data
             reaction_data_io.alphadecay[idx] = decay
@@ -246,10 +248,10 @@ function read_photodissociation!(reaction_data_io::ReactionDataIO, path::String,
     for (reactant::Tuple{Int, Int}, photodissociation::Photodissociation) in photodissociation_dict
         z_r::Int, n_r::Int = reactant
         # Make sure the reactant is in the network
-        if !zn_in_network(z_r, n_r, net_idx)
+        if !zn_in_network(z_r, n_r-1, net_idx)
             continue
         end
-        reactant_idx::Int = zn_to_index(z_r, n_r, net_idx)
+        reactant_idx::Int = zn_to_index(z_r, n_r-1, net_idx)
 
         # Make sure we have the forward rate associated with this reverse rate
         if !haskey(reaction_data_io.ncap_dict, reactant_idx)
