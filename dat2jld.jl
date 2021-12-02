@@ -13,7 +13,7 @@ function parse_cli_args()
             arg_type = String
             required = true
         "--type", "-t"
-            help = "The type of file. Supported type: ncap, probdecay, alphadecay, photodissociation, trajectory, initial-composition, extent"
+            help = "The type of file. Supported type: decay, rxn, probrxn, ncap, probdecay, alphadecay, photodissociation, trajectory, initial-composition, extent"
             arg_type = String
             required = true
         "--output", "-o"
@@ -24,6 +24,76 @@ function parse_cli_args()
 
     args = parse_args(settings)
     return args
+end
+
+function read_decay(path::String)
+    decays = Vector{NRN.DecayIO}()
+    open(path) do file
+        lines = readlines(file)
+        num_entry::Int = parse(Int, lines[1])
+        for i in ProgressBar(1:num_entry)
+            z_rs = [parse(Float64, s) for s in split(lines[5*(i-1) + 2])]
+            n_rs = [parse(Float64, s) for s in split(lines[5*(i-1) + 3])]
+            z_ps = [parse(Float64, s) for s in split(lines[5*(i-1) + 4])]
+            n_ps = [parse(Float64, s) for s in split(lines[5*(i-1) + 5])]
+            rate = parse(Float64, lines[5*(i-1) + 6])
+
+            reactants = collect(zip(z_rs, n_rs))
+            products = collect(zip(z_ps, n_ps))
+
+            push!(decays, NRN.DecayIO(reactants, products, rate))
+        end
+    end
+    return decays
+end
+
+function read_rxn(path::String)
+    rxns = Vector{NRN.RxnIO}()
+    open(path) do file
+        lines = readlines(file)
+        num_entry::Int = parse(Int, lines[1])
+        has_pf::Bool = parse(Bool, lines[2])
+        temps::Vector{Float64} = [parse(Float64, s) for s in split(lines[3])]
+        stride = has_pf ? 6 : 5
+        for i in ProgressBar(1:num_entry)
+            z_rs = [parse(Float64, s) for s in split(lines[stride*(i-1) + 4])]
+            n_rs = [parse(Float64, s) for s in split(lines[stride*(i-1) + 5])]
+            z_ps = [parse(Float64, s) for s in split(lines[stride*(i-1) + 6])]
+            n_ps = [parse(Float64, s) for s in split(lines[stride*(i-1) + 7])]
+            rates = [parse(Float64, s) for s in split(lines[stride*(i-1) + 8])]
+
+            reactants = collect(zip(z_rs, n_rs))
+            products = collect(zip(z_ps, n_ps))
+            rates_lerp = NRN.LinearInterpolations.RxnLerp(temps, rates)
+
+            push!(rxns, NRN.RxnIO(reactants, products, rates_lerp))
+        end
+    end
+    return rxns
+end
+
+function read_probrxn(path::String)
+    probrxns = Vector{NRN.ProbRxnIO}()
+    open(path) do file
+        lines = readlines(file)
+        num_entry::Int = parse(Int, lines[1])
+        temps::Vector{Float64} = [parse(Float64, s) for s in split(lines[2])]
+        for i in ProgressBar(1:num_entry)
+            z_rs = [parse(Int, s) for s in split(lines[6*(i-1) + 3])]
+            n_rs = [parse(Int, s) for s in split(lines[6*(i-1) + 4])]
+            z_ps = [parse(Int, s) for s in split(lines[6*(i-1) + 5])]
+            n_ps = [parse(Int, s) for s in split(lines[6*(i-1) + 6])]
+            rates = [parse(Float64, s) for s in split(lines[6*(i-1) + 7])]
+            avg_nums = [parse(Float64, s) for s in split(lines[6*(i-1) + 8])]
+
+            reactants = collect(zip(z_rs, n_rs))
+            products = collect(zip(z_ps, n_ps))
+            rates_lerp = NRN.LinearInterpolations.RxnLerp(temps, rates)
+
+            push!(probrxns, NRN.ProbRxnIO(reactants, products, avg_nums, rates_lerp))
+        end
+    end
+    return probrxns
 end
 
 function read_ncap(path::String) 
@@ -156,7 +226,13 @@ function main()
     type = args["type"]
 
     obj = missing
-    if type == "ncap"
+    if type == "decay"
+        obj = read_decay(input_fpath)
+    elseif type == "rxn"
+        obj = read_rxn(input_fpath)
+    elseif type == "probrxn"
+        obj = read_probrxn(input_fpath)
+    elseif type == "ncap"
         obj = read_ncap(input_fpath)
     elseif type == "probdecay"
         obj = read_probdecay(input_fpath)
