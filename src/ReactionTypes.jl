@@ -20,6 +20,12 @@ export Photodissociation
 export PhotodissociationIO
 export ReactionData
 export ReactionDataIO
+export ProbRxn
+export ProbRxnIO
+export Rxn
+export RxnIO
+export Decay
+export DecayIO
 export initialize_reactions
 export check_eq_reaction
 
@@ -118,6 +124,44 @@ struct AlphaDecay <: AbstractReaction
     rate::Float64
 end
 
+mutable struct ProbRxnIO <: AbstractReaction
+    reactants::Vector{Tuple{Int, Int}}
+    products::Vector{Tuple{Int, Int}}
+    average_numbers::Vector{Float64}
+    rates_lerp::RxnLerp
+end
+
+struct ProbRxn <: AbstractReaction
+    reactant_idxs::Vector{Int}
+    product_idxs::Vector{Int}
+    average_numbers::Vector{Float64}
+    rates_lerp::RxnLerp
+end
+
+struct RxnIO <: AbstractReaction
+    reactants::Vector{Tuple{Int, Int}}
+    products::Vector{Tuple{Int, Int}}
+    rates_lerp::RxnLerp
+end
+
+struct Rxn <: AbstractReaction
+    reactant_idxs::Vector{Int}
+    product_idxs::Vector{Int}
+    rates_lerp::RxnLerp
+end
+
+struct DecayIO <: AbstractReaction
+    reactants::Vector{Tuple{Int, Int}}
+    products::Vector{Tuple{Int, Int}}
+    rate::Float64
+end
+
+struct Decay <: AbstractReaction
+    reactant_idxs::Vector{Int}
+    product_idxs::Vector{Int}
+    rate::Float64
+end
+
 # TODO: Should this be == instead?
 """
     check_eq_reaction(lhs::AbstractReaction, rhs::AbstractReaction)::Bool
@@ -146,6 +190,9 @@ mutable struct ReactionDataIO
     probdecay::Vector{Tuple{String, ProbDecayIO}}
     ncap_dict::Dict{Int, NeutronCaptureIO}
     alphadecay::Vector{AlphaDecayIO}
+    probrxn::Vector{Tuple{String, ProbRxnIO}}
+    rxn::Vector{RxnIO}
+    decay::Vector{DecayIO}
 end
 
 """
@@ -167,6 +214,9 @@ mutable struct ReactionData
     neutroncapture::Vector{Union{Nothing, NeutronCapture}}
     """The alpha decays in the network, indexed by `zn_to_index()`."""
     alphadecay::Vector{AlphaDecay}
+    probrxn::Vector{ProbRxn}
+    rxn::Vector{Rxn}
+    decay::Vector{Decay}
 end
 
 """
@@ -180,7 +230,10 @@ function initialize_reactions()
     probdecay = Vector{ProbDecay}()
     ncap = Vector{Union{Nothing, NeutronCapture}}()
     alphadecay = Vector{AlphaDecay}()
-    return ReactionData(probdecay, ncap, alphadecay)
+    probrxn = Vector{ProbRxn}()
+    rxn = Vector{Rxn}()
+    decay = Vector{Decay}()
+    return ReactionData(probdecay, ncap, alphadecay, probrxn, rxn, decay)
 end
 
 end
