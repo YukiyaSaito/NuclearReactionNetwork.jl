@@ -14,6 +14,7 @@ export TrajectoryLerp
 export NcapLerp
 export get_rate
 export get_pfunc
+export get_rate_pfunc
 export get_temp_density
 
 """
@@ -130,6 +131,18 @@ function get_pfunc(ncap_lerp::NcapLerp, temp::Float64)::Float64
 
     pfunc::Float64 = lerp(ncap_lerp.pfuncs[idx_left], ncap_lerp.pfuncs[idx_right], t)
     return pfunc
+end
+
+function get_rate_pfunc(ncap_lerp::NcapLerp, temp::Float64)::Tuple{Float64, Float64}
+    idx_left::Int, idx_right::Int = get_lerp_idxs(ncap_lerp.temperatures, temp)
+
+    temp_left::Float64 = ncap_lerp.temperatures[idx_left]
+    temp_right::Float64 = ncap_lerp.temperatures[idx_right]
+    t::Float64 = get_lerp_param(temp_left, temp_right, temp)
+
+    rate::Float64 = lerp(ncap_lerp.rates[idx_left], ncap_lerp.rates[idx_right], t)
+    pfunc::Float64 = lerp(ncap_lerp.pfuncs[idx_left], ncap_lerp.pfuncs[idx_right], t)
+    return rate, pfunc
 end
 
 """

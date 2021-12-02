@@ -19,6 +19,7 @@ export AlphaDecayIO
 export Photodissociation
 export PhotodissociationIO
 export ReactionData
+export ReactionDataIO
 export initialize_reactions
 export check_eq_reaction
 
@@ -45,18 +46,18 @@ mutable struct ProbDecayIO <: AbstractReaction
     """A vector of reactants of the form ``[(Z_0, N_0), (Z_1, N_1), ... (Z_n, N_n)]``"""
     reactant::SVector{1, Tuple{Int, Int}}
     """A vector of products of the form ``[(Z_0, N_0), (Z_1, N_1), ... (Z_n, N_n)]``"""
-    product::SVector{6, Tuple{Int, Int}}
+    product::Vector{Tuple{Int, Int}}
     """The rate of the reaction."""
     rate::Float64
     """A vector of average numbers of species produced."""
-    average_number::SVector{6, Float64}
+    average_number::Vector{Float64}
 end
 
 struct ProbDecay <: AbstractReaction
     reactant_idxs::SVector{1, Int}
-    product_idxs::SVector{6, Int}
+    product_idxs::Vector{Int}
+    average_number::Vector{Float64}
     rate::Float64
-    average_number::SVector{6, Float64}
 end
 
 """
@@ -129,14 +130,6 @@ function check_eq_reaction(lhs::AbstractReaction, rhs::AbstractReaction)::Bool
     return (typeof(lhs) == typeof(rhs)) && (lhs.reactant == rhs.reactant) && (lhs.product == rhs.product)
 end
 
-function check_eq_reaction(lhs::AlphaDecay, rhs::AlphaDecay)::Bool
-    return (typeof(lhs) == typeof(rhs)) && (lhs.reactant_idx == rhs.reactant_idx) && (lhs.product_idxs == rhs.product_idxs)
-end
-
-function check_eq_reaction(lhs::ProbDecay, rhs::ProbDecay)::Bool
-    return (typeof(lhs) == typeof(rhs)) && (lhs.reactant_idxs == rhs.reactant_idxs) && (lhs.product_idxs == rhs.product_idxs)
-end
-
 """
     Photodissociation
 
@@ -147,6 +140,12 @@ The reverse reaction of a neutron capture
 """
 struct Photodissociation
     q::Float64
+end
+
+mutable struct ReactionDataIO
+    probdecay::Vector{Tuple{String, ProbDecayIO}}
+    ncap_dict::Dict{Int, NeutronCaptureIO}
+    alphadecay::Vector{AlphaDecayIO}
 end
 
 """

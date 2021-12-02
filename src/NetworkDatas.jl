@@ -141,7 +141,7 @@ end
     for decay::ProbDecay in nd.reaction_data.probdecay
         reactant_idx::Int = decay.reactant_idxs[1]
 
-        if iszero(decay.rate) || iszero(abundance[reactant_idx])
+        if iszero(abundance[reactant_idx])
             continue
         end
 
@@ -202,9 +202,6 @@ end
 
     for decay::AlphaDecay in nd.reaction_data.alphadecay
         rate::Float64 = decay.rate
-        if iszero(rate)
-            continue
-        end
 
         # Grab the abundace of the reactant
         reactant_idx::Int = decay.reactant_idx
@@ -240,7 +237,7 @@ end
             continue
         end
 
-        forward_rate::Float64 = get_rate(reaction.rates_pfuncs_lerp, curr_traj.temperature)
+        forward_rate::Float64, pfunc_p::Float64 = get_rate_pfunc(reaction.rates_pfuncs_lerp, curr_traj.temperature)
         if iszero(forward_rate)
             continue
         end
@@ -253,14 +250,13 @@ end
         end
 
         # Lookup partition function for the reactant
-        if isnothing(nd.reaction_data.neutroncapture[reactant_idx])
+        if reactant_idx > length(nd.reaction_data.neutroncapture) || isnothing(nd.reaction_data.neutroncapture[reactant_idx])
             pfunc_r::Float64 = 1.0
         else
             reactant = nd.reaction_data.neutroncapture[reactant_idx]
             pfunc_r = get_pfunc(reactant.rates_pfuncs_lerp, curr_traj.temperature)
         end
         pfunc_n::Float64 = 2.0
-        pfunc_p::Float64 = get_pfunc(reaction.rates_pfuncs_lerp, curr_traj.temperature)
 
         pfunc::Float64 = pfunc_n * pfunc_p / pfunc_r # FIXME: What about division by zero?
         if iszero(pfunc)
@@ -343,6 +339,10 @@ end
         return
     end
 
+    # Neutron index and abundance
+    neutron_idx::Int = zn_to_index(Int(0), Int(1), nd.net_idx)
+    neutron_abundance::Float64 = abundance[neutron_idx]
+
     # TODO: Convert this to a loop instead of 6 hard coded changes to the jacobian?
     for capture::Union{Nothing, NeutronCapture} in nd.reaction_data.neutroncapture
         if isnothing(capture)
@@ -353,10 +353,6 @@ end
         if iszero(rate)
             continue
         end
-
-        # Neutron index and abundance
-        neutron_idx::Int = zn_to_index(Int(0), Int(1), nd.net_idx)
-        neutron_abundance::Float64 = abundance[neutron_idx]
 
         # Reactant index and abundance
         reactant_idx::Int = capture.reactant_idxs[2]
@@ -433,7 +429,7 @@ end
         product_idx::Int = reaction.reactant_idxs[2]
 
         # Lookup partition function for the reactant (product of the forward reaction)
-        if isnothing(nd.reaction_data.neutroncapture[reactant_idx])
+        if reactant_idx > length(nd.reaction_data.neutroncapture) || isnothing(nd.reaction_data.neutroncapture[reactant_idx])
             pfunc_r::Float64 = 1.0
         else
             reactant = nd.reaction_data.neutroncapture[reactant_idx]
