@@ -12,6 +12,7 @@ module LinearInterpolations
 
 export TrajectoryLerp
 export NcapLerp
+export RxnLerp
 export get_rate
 export get_pfunc
 export get_rate_pfunc
@@ -37,6 +38,11 @@ struct NcapLerp
     rates::Vector{Float64}
     """The data points for the partition function for neutron captures to interpolate between."""
     pfuncs::Vector{Float64}
+end
+
+struct RxnLerp
+    temperatures::Vector{Float64}
+    rates::Vector{Float64}
 end
 
 """
@@ -112,6 +118,17 @@ function get_rate(ncap_lerp::NcapLerp, temp::Float64)::Float64
     t::Float64 = get_lerp_param(temp_left, temp_right, temp)
 
     rate::Float64 = lerp(ncap_lerp.rates[idx_left], ncap_lerp.rates[idx_right], t)
+    return rate
+end
+
+function get_rate(rxn_lerp::RxnLerp, temp::Float64)::Float64
+    idx_left::Int, idx_right::Int = get_lerp_idxs(rxn_lerp.temperatures, temp)
+
+    temp_left::Float64 = rxn_lerp.temperatures[idx_left]
+    temp_right::Float64 = rxn_lerp.temperatures[idx_right]
+    t::Float64 = get_lerp_param(temp_left, temp_right, temp)
+
+    rate::Float64 = lerp(rxn_lerp.rates[idx_left], rxn_lerp.rates[idx_right], t)
     return rate
 end
 

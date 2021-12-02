@@ -19,9 +19,16 @@ using DelimitedFiles
 
 export NetworkData
 export OutputInfo
+export Checkpoint
 export IncludedReactions
 export fill_jacobian!
 export update_ydot!
+
+struct Checkpoint
+    path::Union{Missing, String}
+    times::Vector{Float64}
+    completed::BitVector
+end
 
 """
     OutputInfo
@@ -49,6 +56,7 @@ struct OutputInfo
     dump_each_iteration::Bool
     """The file to which the simulation shoould the abundances of each species at each time step"""
     iteration_output_path::Union{Missing, String}
+    checkpoint::Checkpoint
 end
 
 """
@@ -73,6 +81,9 @@ mutable struct IncludedReactions
     alphadecay::Bool
     """Whether the reverse reaction of neutron captures are included in the network calculations"""
     photodissociation::Bool
+    probrxn::Bool
+    rxn::Bool
+    decay::Bool
 end
 
 """
@@ -182,14 +193,17 @@ end
             continue
         end
 
+        # Double counting factor
+        dc_factor::Float64 = capture.reactant_idxs[1] == capture.reactant_idxs[2] ? 0.5 : 1.0
+
         # Update ydot for the reactants
         for reactant_idx::Int in capture.reactant_idxs
-            nd.ydot[reactant_idx] += -1.0 * curr_traj.density * rate * abundance_factor
+            nd.ydot[reactant_idx] += -1.0 * dc_factor * curr_traj.density * rate * abundance_factor
         end
 
         # Update ydot for the products
         for product_idx::Int in capture.product_idxs
-            nd.ydot[product_idx] += rate * curr_traj.density * abundance_factor
+            nd.ydot[product_idx] += rate * dc_factor * curr_traj.density * abundance_factor
         end
     end
 end
@@ -280,6 +294,120 @@ end
     end
 end
 
+@inbounds function fill_probrxn_ydot!(nd::NetworkData, use_yproposed::Bool=false)::Nothing
+    abundance::Vector{Float64} = nd.abundance
+    if use_yproposed
+        abundance = nd.yproposed
+    end
+
+    curr_traj::CurrentTrajectory = get_current_trajectory(nd.trajectory, nd.time.current)
+
+    for rxn::ProbRxn in nd.reaction_data.probrxn
+        # Grab the rate of the reaction
+        rate::Float64 = get_rate(rxn.rates_lerp, curr_traj.temperature)
+        if iszero(rate)
+            continue
+        end
+
+        density_factor::Float64 = curr_traj.density^(length(rxn.reactant_idxs) - 1)
+
+        # Grab the abundance of the reactants
+        abundance_factor::Float64 = prod(abundance[rxn.reactant_idxs])
+        if iszero(abundance_factor)
+            continue
+        end
+
+        # Double counting factor
+        # num_same = length(rxn.reactant_idxs) - length(unique(rxn.reactant_idxs))
+        # dc_factor::Float64 = 1/factorial(num_same)
+        dc_factor::Float64 = 1.0 #rxn.reactant_idxs[1] == rxn.reactant_idxs[2] ? 0.5 : 1.0 # FIXME: This does not generalize
+
+        for reactant_idx::Int in rxn.reactant_idxs
+            nd.ydot[reactant_idx] += -1.0 * dc_factor * rate * density_factor * abundance_factor
+        end
+        for (product_idx::Int, average_number::Float64) in zip(rxn.product_idxs, rxn.average_numbers)
+            if iszero(average_number)
+                continue
+            end
+            nd.ydot[product_idx] += dc_factor * average_number * rate * density_factor * abundance_factor
+        end
+    end
+end
+
+@inbounds function fill_rxn_ydot!(nd::NetworkData, use_yproposed::Bool=false)::Nothing
+    abundance::Vector{Float64} = nd.abundance
+    if use_yproposed
+        abundance = nd.yproposed
+    end
+
+    curr_traj::CurrentTrajectory = get_current_trajectory(nd.trajectory, nd.time.current)
+
+    for rxn::Rxn in nd.reaction_data.rxn
+        # Grab the rate of the reaction
+        rate::Float64 = get_rate(rxn.rates_lerp, curr_traj.temperature)
+        if iszero(rate)
+            continue
+        end
+
+        density_factor::Float64 = curr_traj.density^(length(rxn.reactant_idxs) - 1)
+
+        # Grab the abundance of the reactants
+        abundance_factor::Float64 = prod(abundance[rxn.reactant_idxs])
+        if iszero(abundance_factor)
+            continue
+        end
+
+        # Double counting factor
+        # num_same = length(rxn.reactant_idxs) - length(unique(rxn.reactant_idxs))
+        # dc_factor::Float64 = 1/factorial(num_same)
+        dc_factor::Float64  = 1.0
+
+        for reactant_idx::Int in rxn.reactant_idxs
+            nd.ydot[reactant_idx] += -1.0 * dc_factor * rate * density_factor * abundance_factor
+        end
+        for product_idx::Int in rxn.product_idxs
+            nd.ydot[product_idx] += dc_factor * rate * density_factor * abundance_factor
+        end
+    end
+end
+
+@inbounds function fill_decay_ydot!(nd::NetworkData, use_yproposed::Bool=false)::Nothing
+    abundance::Vector{Float64} = nd.abundance
+    if use_yproposed
+        abundance = nd.yproposed
+    end
+
+    curr_traj::CurrentTrajectory = get_current_trajectory(nd.trajectory, nd.time.current)
+
+    for decay::Decay in nd.reaction_data.decay
+        # Grab the rate of the reaction
+        rate::Float64 = decay.rate
+        if iszero(rate)
+            continue
+        end
+
+        density_factor::Float64 = curr_traj.density^(length(decay.reactant_idxs) - 1)
+
+        # Grab the abundance of the reactants
+        abundance_factor::Float64 = prod(abundance[decay.reactant_idxs])
+        if iszero(abundance_factor)
+            continue
+        end
+
+        # Double counting factor
+        # num_same = length(decay.reactant_idxs) - length(unique(decay.reactant_idxs))
+        # dc_factor::Float64 = 1/factorial(num_same)
+        dc_factor::Float64  = 1.0
+
+        for reactant_idx::Int in decay.reactant_idxs
+            nd.ydot[reactant_idx] += -1.0 * dc_factor * rate * density_factor * abundance_factor
+        end
+        for product_idx::Int in decay.product_idxs
+            nd.ydot[product_idx] += dc_factor * rate * density_factor * abundance_factor
+        end
+    end
+end
+
 """
     update_ydot!(nd::NetworkData; use_yproposed::Bool=false)::Nothing
 
@@ -302,6 +430,15 @@ function update_ydot!(nd::NetworkData; use_yproposed::Bool=false)::Nothing
     end
     if nd.included_reactions.probdecay
         fill_probdecay_ydot!(nd, use_yproposed)
+    end
+    if nd.included_reactions.probrxn
+        fill_probrxn_ydot!(nd, use_yproposed)
+    end
+    if nd.included_reactions.rxn
+        fill_rxn_ydot!(nd, use_yproposed)
+    end
+    if nd.included_reactions.decay
+        fill_decay_ydot!(nd, use_yproposed)
     end
 end
 
@@ -459,6 +596,152 @@ end
     end
 end
 
+@inbounds function fill_jacobian_probrxn!(nd::NetworkData, use_yproposed::Bool=false)::Nothing
+    abundance::Vector{Float64} = nd.abundance
+    if use_yproposed
+        abundance = nd.yproposed
+    end
+
+    curr_traj::CurrentTrajectory = get_current_trajectory(nd.trajectory, nd.time.current)
+
+    for rxn::ProbRxn in nd.reaction_data.probrxn
+        # Grab the rate of the reaction
+        rate::Float64 = get_rate(rxn.rates_lerp, curr_traj.temperature)
+        if iszero(rate)
+            continue
+        end
+
+        density_factor::Float64 = curr_traj.density^(length(rxn.reactant_idxs) - 1)
+
+        # Double counting factor
+        # num_same = length(rxn.reactant_idxs) - length(unique(rxn.reactant_idxs))
+        # dc_factor::Float64 = 1/factorial(num_same)
+        dc_factor::Float64 = 1.0 #rxn.reactant_idxs[1] == rxn.reactant_idxs[2] ? 0.5 : 1.0 # FIXME: This does not generalize
+
+        for (i::Int, r1_idx::Int) in enumerate(rxn.reactant_idxs)
+            abundance_factor::Float64 = 1.0
+            for (j::Int, r2_idx::Int) in enumerate(rxn.reactant_idxs)
+                if i != j
+                    abundance_factor *= abundance[r2_idx]
+                end
+            end
+            if iszero(abundance_factor)
+                continue
+            end
+
+            for r2_idx::Int in rxn.reactant_idxs
+                nd.jacobian[r2_idx, r1_idx] += -1.0 * dc_factor * rate * density_factor * abundance_factor
+            end
+
+            for (product_idx::Int, average_number::Float64) in zip(rxn.product_idxs, rxn.average_numbers)
+                if iszero(average_number)
+                    continue
+                end
+                nd.jacobian[product_idx, r1_idx] += dc_factor * average_number * rate * density_factor * abundance_factor
+            end
+        end
+    end
+end
+
+@inbounds function fill_jacobian_rxn!(nd::NetworkData, use_yproposed::Bool=false)::Nothing
+    abundance::Vector{Float64} = nd.abundance
+    if use_yproposed
+        abundance = nd.yproposed
+    end
+
+    curr_traj::CurrentTrajectory = get_current_trajectory(nd.trajectory, nd.time.current)
+
+    for rxn::Rxn in nd.reaction_data.rxn
+        # Grab the rate of the reaction
+        rate::Float64 = get_rate(rxn.rates_lerp, curr_traj.temperature)
+        if iszero(rate)
+            continue
+        end
+
+        density_factor::Float64 = curr_traj.density^(length(rxn.reactant_idxs) - 1)
+
+        # Double counting factor
+        # num_same = length(rxn.reactant_idxs) - length(unique(rxn.reactant_idxs))
+        # dc_factor::Float64 = 1/factorial(num_same)
+        dc_factor::Float64 = 1.0
+
+        # println("Num Reactants: $(length(rxn.reactant_idxs))")
+        # println("====================================")
+        for (i::Int, r1_idx::Int) in enumerate(rxn.reactant_idxs)
+            abundance_factor::Float64 = 1.0
+            for (j::Int, r2_idx::Int) in enumerate(rxn.reactant_idxs)
+                # println("i: $(i), j: $(j), abundance[j]: $(abundance[r2_idx])")
+                if i != j
+                    abundance_factor *= abundance[r2_idx]
+                end
+            end
+            if iszero(abundance_factor)
+                # continue
+            end
+
+            # println("abundance_factor: $(abundance_factor)")
+            # println("dy: $(-1.0 * dc_factor * rate * density_factor * abundance_factor)")
+            # println("rate: $(rate)")
+            # println("")
+
+            for r2_idx::Int in rxn.reactant_idxs
+                # println("r2: $(r2_idx), r1: $(r1_idx)")
+                nd.jacobian[r2_idx, r1_idx] += -1.0 * dc_factor * rate * density_factor * abundance_factor
+                # println("")
+            end
+
+            for product_idx::Int in rxn.product_idxs
+                nd.jacobian[product_idx, r1_idx] += dc_factor * rate * density_factor * abundance_factor
+            end
+        end
+        # println("\n======================\n")
+    end
+end
+
+@inbounds function fill_jacobian_decay!(nd::NetworkData, use_yproposed::Bool=false)::Nothing
+    abundance::Vector{Float64} = nd.abundance
+    if use_yproposed
+        abundance = nd.yproposed
+    end
+
+    curr_traj::CurrentTrajectory = get_current_trajectory(nd.trajectory, nd.time.current)
+
+    for decay::Decay in nd.reaction_data.decay
+        # Grab the rate of the reaction
+        rate::Float64 = decay.rate
+        if iszero(rate)
+            continue
+        end
+
+        density_factor::Float64 = curr_traj.density^(length(decay.reactant_idxs) - 1)
+
+        # Double counting factor
+        # num_same = length(decay.reactant_idxs) - length(unique(decay.reactant_idxs))
+        # dc_factor::Float64 = 1/factorial(num_same)
+        dc_factor::Float64 = 1.0
+
+        for (i::Int, r1_idx::Int) in enumerate(decay.reactant_idxs)
+            abundance_factor::Float64 = 1.0
+            for (j::Int, r2_idx::Int) in enumerate(decay.reactant_idxs)
+                if i != j
+                    abundance_factor *= abundance[r2_idx]
+                end
+            end
+            if iszero(abundance_factor)
+                continue
+            end
+
+            for r2_idx::Int in decay.reactant_idxs
+                nd.jacobian[r2_idx, r1_idx] += -1.0 * dc_factor * rate * density_factor * abundance_factor
+            end
+
+            for product_idx::Int in decay.product_idxs
+                nd.jacobian[product_idx, r1_idx] += dc_factor * rate * density_factor * abundance_factor
+            end
+        end
+    end
+end
+
 """
     fill_jacobian!(nd::NetworkData; use_yproposed::Bool=false)::Vector{Float64}
 
@@ -484,6 +767,15 @@ function fill_jacobian!(nd::NetworkData; use_yproposed::Bool=false)::Vector{Floa
     end
     if nd.included_reactions.probdecay
         fill_jacobian_probdecay!(nd, use_yproposed)
+    end
+    if nd.included_reactions.probrxn
+        fill_jacobian_probrxn!(nd, use_yproposed)
+    end
+    if nd.included_reactions.rxn
+        fill_jacobian_rxn!(nd, use_yproposed)
+    end
+    if nd.included_reactions.decay
+        fill_jacobian_decay!(nd, use_yproposed)
     end
 
     mul!(nd.jacobian, nd.jacobian, -1.0)

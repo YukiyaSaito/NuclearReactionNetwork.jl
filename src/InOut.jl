@@ -22,6 +22,7 @@ using ..LinearSolvers
 export Result
 export dump_result
 export dump_iteration
+export save_checkpoint
 export initialize_network_data
 
 # TODO: Should this be a matrix rather than a series of vectors of the same size (we would lose type inhomogeneity)?
@@ -138,13 +139,31 @@ function dump_iteration(nd::NetworkData, iteration::Int)::Nothing
     mode::String = iteration == 0 ? "w" : "a"
     open(nd.output_info.iteration_output_path, mode) do out_file
         write(out_file, "$(iteration)\t$(nd.time.current)\t$(curr_traj.temperature)\t$(curr_traj.density)\n")
-        idxs::BitVector = .!iszero.(result.abundance)
-        Zs::Vecotr{Int} = result.proton_nums[idxs]
+        idxs::BitVector = result.abundance .> 1e-15 #.!iszero.(result.abundance)
+        Zs::Vector{Int} = result.proton_nums[idxs]
         As::Vector{Int} = Zs .+ result.neutron_nums[idxs]
-        ys::Vector{Int} = result.abundance[idxs]
+        ys::Vector{Float64} = result.abundance[idxs]
         writedlm(out_file, [Zs As ys])
         write(out_file, "\n")
     end
+    return nothing
+end
+
+function save_checkpoint(nd::NetworkData)::Nothing
+    if !ismissing(nd.output_info.checkpoint.path)
+        for (i, (time, done)) in enumerate(zip(nd.output_info.checkpoint.times, nd.output_info.checkpoint.completed))
+            if done || nd.time.current < time
+                continue
+            end
+            nd.output_info.checkpoint.completed[i] = true
+            println("Saving checkpoint at time $(nd.time.current)")
+            save_object("$(nd.output_info.checkpoint.path)_$(time).jld", nd)
+        end
+    end
+end
+
+function load_checkpoint(path::String)::NetworkData
+    return load_object(path)
 end
 
 function read_boundary(path::String)::Nothing
@@ -155,6 +174,7 @@ end
 
 function read_ncap!(reaction_data_io::ReactionDataIO, path::String, net_idx::NetworkIndex)::Nothing
     ncaps::Vector{NeutronCaptureIO} = load_object(path)
+    num_not_in_network::Int = 0
     for ncap::NeutronCaptureIO in ncaps
         # Make sure every species involved in the reaction is in the network
         out_of_network::Bool = false
@@ -166,6 +186,7 @@ function read_ncap!(reaction_data_io::ReactionDataIO, path::String, net_idx::Net
             end
         end
         if out_of_network
+            num_not_in_network += 1
             continue
         end
 
@@ -174,10 +195,14 @@ function read_ncap!(reaction_data_io::ReactionDataIO, path::String, net_idx::Net
         reactant_idx::Int = zn_to_index(z_r, n_r, net_idx)
         reaction_data_io.ncap_dict[reactant_idx] = ncap
     end
+    if num_not_in_network > 0
+        println("$(num_not_in_network) reactions outside the network in file $(path)")
+    end
 end
 
 function read_probdecay!(reaction_data_io::ReactionDataIO, path::String, id::String, net_idx::NetworkIndex)::Nothing
     probdecay::Vector{ProbDecayIO} = load_object(path)
+    num_not_in_network::Int = 0
     for decay::ProbDecayIO in probdecay
         # Make sure every species involved in the reaction is in the network
         out_of_network::Bool = false
@@ -189,11 +214,7 @@ function read_probdecay!(reaction_data_io::ReactionDataIO, path::String, id::Str
             end
         end
         if out_of_network
-            continue
-        end
-
-        # Remove reactions with zero rate
-        if iszero(decay.rate)
+            num_not_in_network += 1
             continue
         end
 
@@ -208,10 +229,14 @@ function read_probdecay!(reaction_data_io::ReactionDataIO, path::String, id::Str
             push!(reaction_data_io.probdecay, (id, decay))
         end
     end
+    if num_not_in_network > 0
+        println("$(num_not_in_network) reactions outside the network in file $(path)")
+    end
 end
 
 function read_alphadecay!(reaction_data_io::ReactionDataIO, path::String, net_idx::NetworkIndex)::Nothing
     alphadecay::Vector{AlphaDecayIO} = load_object(path)
+    num_not_in_network::Int = 0
     for decay::AlphaDecayIO in alphadecay
         # Make sure every species involved in the reaction is in the network
         out_of_network::Bool = false
@@ -223,10 +248,7 @@ function read_alphadecay!(reaction_data_io::ReactionDataIO, path::String, net_id
             end
         end
         if out_of_network
-            continue
-        end
-
-        if iszero(decay.rate)
+            num_not_in_network += 1
             continue
         end
 
@@ -240,6 +262,9 @@ function read_alphadecay!(reaction_data_io::ReactionDataIO, path::String, net_id
             # Add the reaction to the array
             push!(reaction_data_io.alphadecay, decay)
         end
+    end
+    if num_not_in_network > 0
+        println("$(num_not_in_network) reactions outside the network in file $(path)")
     end
 end
 
@@ -264,6 +289,102 @@ function read_photodissociation!(reaction_data_io::ReactionDataIO, path::String,
     end
 end
 
+function read_probrxn!(reaction_data_io::ReactionDataIO, path::String, id::String, net_idx::NetworkIndex)::Nothing
+    probrxns::Vector{ProbRxnIO} = load_object(path)
+    num_not_in_network::Int = 0
+    for rxn::ProbRxnIO in probrxns
+        # Make sure every species involved in the reaction is in the network
+        out_of_network::Bool = false
+        for (z::Int, n::Int) in [rxn.products; rxn.reactants]
+            if !zn_in_network(z, n, net_idx)
+                out_of_network = true
+                break
+            end
+        end
+        if out_of_network
+            num_not_in_network += 1
+            continue
+        end
+
+        # Check if we already have this reaction in the network
+        idx::Union{Nothing, Int} = findfirst(other -> rxn.reactants == other[2].reactants && id == other[1], reaction_data_io.probrxn)
+        if !isnothing(idx)
+            # Replace the old data
+            reaction_data_io.probrxn[idx] = (id, rxn)
+        else
+            # Add the reaction to the array
+            push!(reaction_data_io.probrxn, (id, rxn))
+        end
+    end
+    if num_not_in_network > 0
+        println("$(num_not_in_network) reactions outside the network in file $(path)")
+    end
+end
+
+function read_rxn!(reaction_data_io::ReactionDataIO, path::String, net_idx::NetworkIndex)::Nothing
+    rxns::Vector{RxnIO} = load_object(path)
+    num_not_in_network::Int = 0
+    for rxn::RxnIO in rxns
+        # Make sure every species involved in the reaction is in the network
+        out_of_network::Bool = false
+        for (z::Int, n::Int) in [rxn.products; rxn.reactants]
+            if !zn_in_network(z, n, net_idx)
+                out_of_network = true
+                break
+            end
+        end
+        if out_of_network
+            num_not_in_network += 1
+            continue
+        end
+
+        # Check if we already have this reaction in the network
+        idx::Union{Nothing, Int} = findfirst(other -> rxn.reactants == other.reactants && rxn.products == other.products, reaction_data_io.rxn)
+        if !isnothing(idx)
+            # Replace the old data
+            reaction_data_io.rxn[idx] = rxn
+        else
+            # Add the reaction to the array
+            push!(reaction_data_io.rxn, rxn)
+        end
+    end
+    if num_not_in_network > 0
+        println("$(num_not_in_network) reactions outside the network in file $(path)")
+    end
+end
+
+function read_decay!(reaction_data_io::ReactionDataIO, path::String, net_idx::NetworkIndex)::Nothing
+    decays::Vector{DecayIO} = load_object(path)
+    num_not_in_network::Int = 0
+    for decay::DecayIO in decays
+        # Make sure every species involved in the reaction is in the network
+        out_of_network::Bool = false
+        for (z::Int, n::Int) in [decay.products; decay.reactants]
+            if !zn_in_network(z, n, net_idx)
+                out_of_network = true
+                break
+            end
+        end
+        if out_of_network
+            num_not_in_network += 1
+            continue
+        end
+
+        # Check if we already have this reaction in the network
+        idx::Union{Nothing, Int} = findfirst(other -> decay.reactants == other.reactants && decay.products == other.products, reaction_data_io.decay)
+        if !isnothing(idx)
+            # Replace the old data
+            reaction_data_io.decay[idx] = decay
+        else
+            # Add the reaction to the array
+            push!(reaction_data_io.decay, decay)
+        end
+    end
+    if num_not_in_network > 0
+        println("$(num_not_in_network) reactions outside the network in file $(path)")
+    end
+end
+
 function read_dataset!(reaction_data_io::ReactionDataIO, included_reactions::IncludedReactions, dataset::DataStructures.OrderedDict{String, Any}, net_idx::NetworkIndex)
     if !get(dataset, "active", false)
         return
@@ -274,7 +395,7 @@ function read_dataset!(reaction_data_io::ReactionDataIO, included_reactions::Inc
         read_ncap!(reaction_data_io, dataset["path"], net_idx)
         included_reactions.ncap = true
     elseif dataset["rxn_type"] == "probdecay"
-        println("Reading beta decay...")
+        println("Reading probdecay...")
         read_probdecay!(reaction_data_io, dataset["path"], id, net_idx)
         included_reactions.probdecay = true
     elseif dataset["rxn_type"] == "alphadecay"
@@ -285,6 +406,18 @@ function read_dataset!(reaction_data_io::ReactionDataIO, included_reactions::Inc
         println("Reading photodissociation...")
         read_photodissociation!(reaction_data_io, dataset["path"], net_idx)
         included_reactions.photodissociation = true
+    elseif dataset["rxn_type"] == "probrxn"
+        println("Reading probreaction...")
+        read_probrxn!(reaction_data_io, dataset["path"], id, net_idx)
+        included_reactions.probrxn = true
+    elseif dataset["rxn_type"] == "rxn"
+        println("Reading rxn...")
+        read_rxn!(reaction_data_io, dataset["path"], net_idx)
+        included_reactions.rxn = true
+    elseif dataset["rxn_type"] == "decay"
+        println("Reading decay...")
+        read_decay!(reaction_data_io, dataset["path"], net_idx)
+        included_reactions.decay = true
     else
         error("Unknown reaction type: $(dataset["rxn_type"])")
     end
@@ -322,6 +455,11 @@ end
 function post_process_probdecay(probdecay::Vector{Tuple{String, ProbDecayIO}}, net_idx::NetworkIndex)
     probdecay_data = Vector{ProbDecay}()
     for (_, decay) in probdecay
+        # Remove reactions with zero rate
+        if iszero(decay.rate) || iszero(decay.average_number)
+            continue
+        end
+
         reactant_idxs = SVector{1, Int}(zn_to_index(decay.reactant[1][1], decay.reactant[1][2], net_idx))
         product_idxs = Vector{Int}([zn_to_index(product[1], product[2], net_idx) for product in decay.product])
         real_decay = ProbDecay(reactant_idxs, product_idxs, decay.average_number, decay.rate)
@@ -331,10 +469,18 @@ function post_process_probdecay(probdecay::Vector{Tuple{String, ProbDecayIO}}, n
 end
 
 function post_process_ncap(ncap_dict::Dict{Int, NeutronCaptureIO}, net_idx::NetworkIndex)
+    if length(ncap_dict) == 0
+        return []
+    end
     vec_size = maximum(keys(ncap_dict))
     ncap_data = Vector{Union{Nothing, NeutronCapture}}(nothing, vec_size)
     for (idx, ncap) in ncap_dict
         if isnothing(ncap) || idx > vec_size
+            continue
+        end
+
+        # Remove reactions that have zero rate
+        if iszero(ncap.rates_pfuncs_lerp.rates)
             continue
         end
 
@@ -354,6 +500,11 @@ end
 function post_process_alpha(alphadecay::Vector{AlphaDecayIO}, net_idx::NetworkIndex)
     alpha_data = Vector{AlphaDecay}()
     for decay in alphadecay
+        # Get rid of reactions with zero rate
+        if iszero(decay.rate)
+            continue
+        end
+
         reactant_idx = zn_to_index(decay.reactant[1], decay.reactant[2], net_idx)
         product_idxs = SVector{2, Int}([zn_to_index(product[1], product[2], net_idx) for product in decay.product])
         real_decay = AlphaDecay(reactant_idx, product_idxs, decay.rate)
@@ -362,12 +513,63 @@ function post_process_alpha(alphadecay::Vector{AlphaDecayIO}, net_idx::NetworkIn
     return alpha_data
 end
 
+function post_process_probrxn(probrxn::Vector{Tuple{String, ProbRxnIO}}, net_idx::NetworkIndex)
+    probrxn_data = Vector{ProbRxn}()
+    for (_, rxn) in probrxn
+        # Remove reactions with zero rate
+        if iszero(rxn.rates_lerp.rates) || iszero(rxn.average_numbers)
+            continue
+        end
+
+        reactant_idxs = Vector{Int}([zn_to_index(reactant[1], reactant[2], net_idx) for reactant in rxn.reactants])
+        product_idxs = Vector{Int}([zn_to_index(product[1], product[2], net_idx) for product in rxn.products])
+        real_rxn = ProbRxn(reactant_idxs, product_idxs, rxn.average_numbers, rxn.rates_lerp)
+        push!(probrxn_data, real_rxn)
+    end
+    return probrxn_data
+end
+
+function post_process_rxn(rxns::Vector{RxnIO}, net_idx::NetworkIndex)
+    rxn_data = Vector{Rxn}()
+    for rxn in rxns
+        # Remove reactions with zero rate
+        if iszero(rxn.rates_lerp.rates)
+            continue
+        end
+
+        reactant_idxs = Vector{Int}([zn_to_index(reactant[1], reactant[2], net_idx) for reactant in rxn.reactants])
+        product_idxs = Vector{Int}([zn_to_index(product[1], product[2], net_idx) for product in rxn.products])
+        real_rxn = Rxn(reactant_idxs, product_idxs, rxn.rates_lerp)
+        push!(rxn_data, real_rxn)
+    end
+    return rxn_data
+end
+
+function post_process_decay(decays::Vector{DecayIO}, net_idx::NetworkIndex)
+    decay_data = Vector{Decay}()
+    for decay in decays
+        # Remove reactions with zero rate
+        if iszero(decay.rate)
+            continue
+        end
+
+        reactant_idxs = Vector{Int}([zn_to_index(reactant[1], reactant[2], net_idx) for reactant in decay.reactants])
+        product_idxs = Vector{Int}([zn_to_index(product[1], product[2], net_idx) for product in decay.products])
+        real_decay = Decay(reactant_idxs, product_idxs, decay.rate)
+        push!(decay_data, real_decay)
+    end
+    return decay_data
+end
+
 function post_process_reaction_data(reaction_data_io::ReactionDataIO, net_idx::NetworkIndex)
     probdecay_data = post_process_probdecay(reaction_data_io.probdecay, net_idx)
     ncap_data = post_process_ncap(reaction_data_io.ncap_dict, net_idx)
     alpha_data = post_process_alpha(reaction_data_io.alphadecay, net_idx)
+    probrxn_data = post_process_probrxn(reaction_data_io.probrxn, net_idx)
+    rxn_data = post_process_rxn(reaction_data_io.rxn, net_idx)
+    decay_data = post_process_decay(reaction_data_io.decay, net_idx)
 
-    reaction_data::ReactionData = ReactionData(probdecay_data, ncap_data, alpha_data)
+    reaction_data::ReactionData = ReactionData(probdecay_data, ncap_data, alpha_data, probrxn_data, rxn_data, decay_data)
     return reaction_data
 end
 
@@ -381,13 +583,19 @@ function initialize_network_data(path::String)
     println("Parsing JSON...")
     j = JSON.parsefile(path, dicttype=DataStructures.OrderedDict)
 
+    if get(get(get(j, "network", Dict()), "checkpoint", Dict()), "use", false)
+        println("Loading checkpoint $(j["network"]["checkpoint"]["path"])...")
+        nd = load_checkpoint(j["network"]["checkpoint"]["path"])
+        return nd
+    end
+
     # Get the network index
     println("Reading index...")
     net_idx::NetworkIndex = load_object(j["network"]["extent"]["path"])
 
     # Get the reaction data
-    reaction_data_io::ReactionDataIO = ReactionDataIO([], Dict(), [])
-    included_reactions::IncludedReactions = IncludedReactions(false, false, false, false)
+    reaction_data_io::ReactionDataIO = ReactionDataIO([], Dict(), [], [], [], [])
+    included_reactions::IncludedReactions = IncludedReactions(false, false, false, false, false, false, false)
     for dataset in j["reactions"]
         read_dataset!(reaction_data_io, included_reactions, dataset, net_idx)
     end
@@ -435,7 +643,17 @@ function initialize_network_data(path::String)
     final_ya_path::Union{Missing, String} = dump_final_y ? j["output"]["ya"]["path"] : missing
     dump_each_iteration::Bool = get(get(get(j, "output", Dict()), "ytime", Dict()), "active", false)
     iteration_output_path::Union{Missing, String} = dump_final_y ? j["output"]["ytime"]["path"] : missing
-    output_info::OutputInfo = OutputInfo(dump_final_y, final_y_path, dump_final_ya, final_ya_path, dump_each_iteration, iteration_output_path)
+
+    # Checkpoints
+    checkpoint_path::Union{Missing, String} = get(get(get(j, "output", Dict()), "checkpoints", Dict()), "path", missing)
+    checkpoint_times::Vector{Float64} = Vector{Float64}()
+    if !ismissing(checkpoint_path)
+        checkpoint_times = j["output"]["checkpoints"]["times"]
+    end
+    checkpoint_completed = BitVector(repeat([false], length(checkpoint_times)))
+    checkpoint = Checkpoint(checkpoint_path, checkpoint_times, checkpoint_completed)
+
+    output_info::OutputInfo = OutputInfo(dump_final_y, final_y_path, dump_final_ya, final_ya_path, dump_each_iteration, iteration_output_path, checkpoint)
 
     # Get the linear solver
     println("Initializing solver...")
