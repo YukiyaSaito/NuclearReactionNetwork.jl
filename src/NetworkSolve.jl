@@ -25,9 +25,10 @@ export SolveNetwork!
 export clip_abundance!
 
 function check_mass_fraction_unity(nd::NetworkData, tolerance::Float64=1e-8)::Bool
-    y = copy(nd.yproposed)
-    y[y .< 0.0] .= 0.0 # Clip negative abundances
-    return abs(1.0 - dot(y, nd.net_idx.mass_vector)) < tolerance
+    nd.yproposed[nd.yproposed .< 0.0] .= 0.0
+    # y = copy(nd.yproposed)
+    # y[y .< 0.0] .= 0.0 # Clip negative abundances
+    return abs(1.0 - dot(nd.yproposed, nd.net_idx.mass_vector)) < tolerance
 end
 
 function lu_dot!(F::UmfpackLU, S::SparseMatrixCSC{<:UMFVTypes,<:UMFITypes}; check::Bool=true)
@@ -76,7 +77,7 @@ function newton_raphson_iteration!(nd::NetworkData, Δy::Vector{Float64})::Int
 
         # Halve the time step after 1 failed attempt
         num_tries += 1
-        if num_tries > 0
+        if num_tries > 1
             # @printf "\t\tHalving time step\n"
             nd.time.step /= 2.0
             num_tries = 0
@@ -88,6 +89,7 @@ function newton_raphson_iteration!(nd::NetworkData, Δy::Vector{Float64})::Int
 
         A = nd.jacobian
         b = ((nd.ydot .- (nd.yproposed .- nd.abundance) ./ nd.time.step))
+        # b = nd.ydot
         Δy .= solve_linear_system(A, b, nd.solver)
         nd.yproposed .+= Δy
     end
