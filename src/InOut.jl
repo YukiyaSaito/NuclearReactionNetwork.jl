@@ -51,10 +51,10 @@ end
 Constructs a [`Result`](@ref) from the data of the network.
 """
 function Result(nd::NetworkData)::Result
-    boundary::Matrix{Int} = nd.net_idx.networkboundary.matrix
+    boundary::Matrix{Int} = nd.rd.net_idx.networkboundary.matrix
 
-    zs::Vector{Int} = zeros(Int, length(nd.abundance))
-    ns::Vector{Int} = zeros(Int, length(nd.abundance))
+    zs::Vector{Int} = zeros(Int, length(nd.wd.abundance))
+    ns::Vector{Int} = zeros(Int, length(nd.wd.abundance))
 
     index::Int = 1
     for (z::Int, n_low::Int, n_high::Int) in eachrow(boundary)
@@ -63,7 +63,7 @@ function Result(nd::NetworkData)::Result
         ns[index:index+dn] = range(n_low, n_high, length=dn+1)
         index += dn + 1
     end
-    return Result(zs, ns, nd.abundance)
+    return Result(zs, ns, nd.wd.abundance)
 end
 
 """
@@ -73,7 +73,7 @@ Outputs the abundances of each species to the disk.
 """
 function dump_y(nd::NetworkData)::Nothing
     result::Result = Result(nd)
-    open(nd.output_info.final_y_path, "w") do out_file
+    open(nd.rd.output_info.final_y_path, "w") do out_file
         # TODO: This should really write [Int Int Float64], but right now it gets promoted to [Float64 Float64 Float64]
         idxs::BitVector = .!iszero.(result.abundance)
         Zs::Vector{Int} = result.proton_nums[idxs]
@@ -91,7 +91,7 @@ Outputs the abundances of each mass number to the disk.
 """
 function dump_ya(nd::NetworkData)::Nothing
     result::Result = Result(nd)
-    open(nd.output_info.final_ya_path, "w") do out_file
+    open(nd.rd.output_info.final_ya_path, "w") do out_file
         # TODO: This should really write [Int Int Float64], but right now it gets promoted to [Float64 Float64 Float64]
         idxs::BitVector = .!iszero.(result.abundance)
         Zs::Vector{Int} = result.proton_nums[idxs]
@@ -114,10 +114,10 @@ Outputs the results of the network calculations to the disk. This is usually cal
 end of network calculation.
 """
 function dump_result(nd::NetworkData)::Nothing
-    if nd.output_info.dump_final_y
+    if nd.rd.output_info.dump_final_y
         dump_y(nd)
     end
-    if nd.output_info.dump_final_ya
+    if nd.rd.output_info.dump_final_ya
         dump_ya(nd)
     end
     return nothing
@@ -130,15 +130,15 @@ Outputs the current state of the network calculations to the disk. This is usual
 after any iteration.
 """
 function dump_iteration(nd::NetworkData, iteration::Int)::Nothing
-    if !nd.output_info.dump_each_iteration
+    if !nd.rd.output_info.dump_each_iteration
         return
     end
 
     result::Result = Result(nd)
-    curr_traj::CurrentTrajectory = get_current_trajectory(nd.trajectory, nd.time.current)
+    curr_traj::CurrentTrajectory = get_current_trajectory(nd.rd.trajectory, nd.wd.time.current)
     mode::String = iteration == 0 ? "w" : "a"
-    open(nd.output_info.iteration_output_path, mode) do out_file
-        write(out_file, "$(iteration)\t$(nd.time.current)\t$(curr_traj.temperature)\t$(curr_traj.density)\n")
+    open(nd.rd.output_info.iteration_output_path, mode) do out_file
+        write(out_file, "$(iteration)\t$(nd.wd.time.current)\t$(curr_traj.temperature)\t$(curr_traj.density)\n")
         idxs::BitVector = result.abundance .> 1e-15 #.!iszero.(result.abundance)
         Zs::Vector{Int} = result.proton_nums[idxs]
         As::Vector{Int} = Zs .+ result.neutron_nums[idxs]
@@ -150,14 +150,14 @@ function dump_iteration(nd::NetworkData, iteration::Int)::Nothing
 end
 
 function save_checkpoint(nd::NetworkData)::Nothing
-    if !ismissing(nd.output_info.checkpoint.path)
-        for (i, (time, done)) in enumerate(zip(nd.output_info.checkpoint.times, nd.output_info.checkpoint.completed))
-            if done || nd.time.current < time
+    if !ismissing(nd.rd.output_info.checkpoint.path)
+        for (i, (time, done)) in enumerate(zip(nd.rd.output_info.checkpoint.times, nd.rd.output_info.checkpoint.completed))
+            if done || nd.wd.time.current < time
                 continue
             end
-            nd.output_info.checkpoint.completed[i] = true
-            println("Saving checkpoint at time $(nd.time.current)")
-            save_object("$(nd.output_info.checkpoint.path)_$(time).jld", nd)
+            nd.rd.output_info.checkpoint.completed[i] = true
+            println("Saving checkpoint at time $(nd.wd.time.current)")
+            save_object("$(nd.rd.output_info.checkpoint.path)_$(time).jld", nd)
         end
     end
 end
@@ -660,7 +660,9 @@ function initialize_network_data(path::String)
     solver = get_solver(j["computational"]["solver"]["type"])
 
     # Create the network data
-    nd::NetworkData = NetworkData(net_idx, reaction_data, trajectory, abundance, yproposed, ydot, time, jacobian, output_info, included_reactions, solver)
+    ro_data = ROData(net_idx, reaction_data, trajectory, output_info, included_reactions)
+    rw_data = RWData(abundance, yproposed, ydot, time, jacobian, solver)
+    nd::NetworkData = NetworkData(ro_data, rw_data)
 
     # Update both the Jacobian and ydot
     println("Initializing the network...")
