@@ -1,6 +1,6 @@
 name = "NuclearReactionNetwork"
 uuid = "a7ba2b4c-5c8a-4117-add0-163f5ea5e167"
-authors = ["Yukiya Saito <saito@triumf.ca>"]
+authors = ["Yukiya Saito <saito@triumf.ca>", "Paul Virally <pvirally@uwaterloo.ca>"]
 version = "0.1.0"
 
 [deps]
