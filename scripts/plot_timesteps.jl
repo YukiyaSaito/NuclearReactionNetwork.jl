@@ -5,10 +5,11 @@ using CSV
 using DelimitedFiles
 using DataFrames
 using ProgressBars
+using Printf
 
 measured_path = "/Users/pvirally/Dropbox/Waterloo/Co-op/TRIUMF/Misc/species_data.csv";
-data_path = "/Users/pvirally/Dropbox/Waterloo/Co-op/TRIUMF/prism1.5.0/input/output/dynamical-simple_fission-YTime.txt"
-out_path = "/Users/pvirally/Desktop/wind-all.mp4"
+data_path = "/Users/pvirally/Dropbox/Waterloo/Co-op/TRIUMF/output/dynamical-simple_fission-YTime.txt"
+out_path = "/Users/pvirally/Desktop/ns-merger.mp4"
 
 struct Epoch
     timestep::Int
@@ -23,7 +24,7 @@ end
 function read_epochs(path)
     epochs = Vector{Epoch}()
     open(path) do file
-        lines = readlines(file)[2:end]
+        lines = readlines(file)
 
         timestep = nothing
         time = nothing
@@ -44,8 +45,9 @@ function read_epochs(path)
                 abundances = Vector{Float64}()
                 continue
             end
-            if startswith(line, "timestep")
-                timestep, time, temp, density = split(line)[2:2:end]
+            line_data = split(line)
+            if length(line_data) == 4
+                timestep, time, temp, density = line_data
                 timestep = parse(Int, timestep)
                 time = parse(Float64, time)
                 temp = parse(Float64, temp)
@@ -53,9 +55,10 @@ function read_epochs(path)
                 continue
             end
 
-            z, n, abundance = split(line)
-            z = parse(Int, z)
-            n = parse(Int, n)
+            z, a, abundance = line_data
+            z = Int(parse(Float64, z))
+            a = Int(parse(Float64, a))
+            n = a-z
             abundance = parse(Float64, abundance)
 
             push!(zs, z)
@@ -111,7 +114,7 @@ densities = [epoch.density for epoch in epochs]
 temps = [epoch.temp for epoch in epochs]
 
 println("Setting up animation...")
-measured_fig = Figure()
+measured_fig = Figure(resolution=(1680*1, 1050*1))
 ax = Axis(measured_fig[1, 1], xlabel="Neutron Number (N)", ylabel="Proton Number (Z)")
 
 temp_ax = Axis(measured_fig[1, 1], width=Relative(0.3), height=Relative(0.3), halign=0.85, valign=0.15, yticklabelcolor=:blue, ytickcolor=:blue, backgroundcolor=:lightgray, xscale=log10, yscale=log10, xlabel="Time [s]", ylabel="Tmperature [GK]", xlabelsize=12, ylabelsize=12)
@@ -133,7 +136,7 @@ limits!(temp_ax, minimum(times), maximum(times), minimum(temps), maximum(temps))
 limits!(density_ax, minimum(times), maximum(times), minimum(densities), maximum(densities))
 
 to_remove = []
-pb_epochs = ProgressBar(epochs)
+pb_epochs = ProgressBar(epochs[1:5:end])
 set_description(pb_epochs, "Creating animation")
 record(measured_fig, out_path, pb_epochs; framerate=30) do epoch
     global ax, traj_ax, to_remove, temp_points, density_points
@@ -145,7 +148,8 @@ record(measured_fig, out_path, pb_epochs; framerate=30) do epoch
     temp_points[] = push!(temp_points[], Point2(epoch.time, epoch.temp))
     density_points[] = push!(density_points[], Point2(epoch.time, epoch.density))
     
-    push!(to_remove, text!(ax, "Time: $(epoch.time) [s]\nTemperature $(epoch.temp) [GK]\nDensity: $(epoch.density) [g/cm^3]", position=(0, 100)))
+    text = @sprintf "Time: %.3e[s]\nTemperature: %.3e [GK]\nDensity: %.3e [g/cm^3]" epoch.time epoch.temp epoch.density
+    push!(to_remove, text!(ax, text, position=(0, 100)))
     data_rects = map(zn_to_rect, epoch.zs, epoch.ns)
     colors = remap.(log.(epoch.abundances), log(1e-15), log(1.0), 0.0, 1.0)
     push!(to_remove, poly!(ax, data_rects, color=colors, colormap=:viridis))
