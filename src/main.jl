@@ -7,7 +7,6 @@ using ..NetworkDatas
 using LinearAlgebra
 using SparseArrays
 using Printf
-using InteractiveUtils
 using Profile
 
 export main
