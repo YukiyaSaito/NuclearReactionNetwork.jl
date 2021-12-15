@@ -26,23 +26,29 @@ function read_test(path::String)
     println("Setting BLAS thread count...")
     BLAS.set_num_threads(4)
 
-    n = Threads.nthreads()
-    println("Num threads: $(n)")
+    println("Num threads: $(Threads.nthreads())")
 
     println("Loading data...")
-    nd::NetworkData = initialize_network_data(path)
-    rd = deepcopy(nd.rd)
-    wds::Vector{RWData} = [deepcopy(nd.wd) for _ in 1:n]
-    nds::Vector{NetworkData} = [NetworkData(rd, wd) for wd in wds]
-    Threads.@threads for nd in nds
-    # for nd in nds
+    nds::Vector{NetworkData} = initialize_network_data(path)
+    if length(nds) == 1 || Threads.nthreads() == 1
         try
             println("Solving network...")
-            SolveNetwork!(nd)
+            SolveNetwork!(nds[1])
         finally
-            clip_abundance!(nd,1e-15)
-            dump_result(nd)
+            clip_abundance!(nds[1], 1e-15)
+            dump_result(nds[1])
             println("Wrote results to disk")
+        end
+    else
+        Threads.@threads for nd in nds
+            try
+                println("Solving network...")
+                SolveNetwork!(nd)
+            finally
+                clip_abundance!(nd, 1e-15)
+                dump_result(nd)
+                println("Wrote results to disk")
+            end
         end
     end
 end

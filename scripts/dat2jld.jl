@@ -41,7 +41,7 @@ function read_decay(path::String)
             reactants = collect(zip(z_rs, n_rs))
             products = collect(zip(z_ps, n_ps))
 
-            push!(decays, NRN.DecayIO(reactants, products, rate))
+            push!(decays, NRN.DecayIO(reactants, products, rate, ""))
         end
     end
     return decays
@@ -66,7 +66,7 @@ function read_rxn(path::String)
             products = collect(zip(z_ps, n_ps))
             rates_lerp = NRN.LinearInterpolations.RxnLerp(temps, rates)
 
-            push!(rxns, NRN.RxnIO(reactants, products, rates_lerp))
+            push!(rxns, NRN.RxnIO(reactants, products, rates_lerp, ""))
         end
     end
     return rxns
@@ -90,7 +90,7 @@ function read_probrxn(path::String)
             products = collect(zip(z_ps, n_ps))
             rates_lerp = NRN.LinearInterpolations.RxnLerp(temps, rates)
 
-            push!(probrxns, NRN.ProbRxnIO(reactants, products, avg_nums, rates_lerp))
+            push!(probrxns, NRN.ProbRxnIO(reactants, products, avg_nums, rates_lerp, ""))
         end
     end
     return probrxns
@@ -127,7 +127,7 @@ function read_ncap(path::String)
 
                 rates_pfuncs_lerp = NRN.LinearInterpolations.NcapLerp(temperature, rates, pfuncs)
 
-                push!(ncaps, NRN.NeutronCaptureIO(reactants, products, rates_pfuncs_lerp, 0.0, nothing))
+                push!(ncaps, NRN.NeutronCaptureIO(reactants, products, rates_pfuncs_lerp, 0.0, nothing, ""))
             end
         end
     end
@@ -155,7 +155,7 @@ function read_probdecay(path::String)
             reactants = SVector{1, Tuple{Int, Int}}(collect(zip(z_rs, n_rs)))
             products = collect(zip(z_ps, n_ps))
 
-            push!(probdecay, NRN.ProbDecayIO(reactants, products, rate, average_number))
+            push!(probdecay, NRN.ProbDecayIO(reactants, products, rate, average_number, ""))
         end
     end
     return probdecay
@@ -177,7 +177,7 @@ function read_alphadecay(path::String)
             reactant = (z_r, n_r)
             product = SVector{2, Tuple{Int, Int}}([(z_p[1], n_p[1]), (z_p[2], n_p[2])])
 
-            push!(alphadecay, NRN.AlphaDecayIO(reactant, product, rate))
+            push!(alphadecay, NRN.AlphaDecayIO(reactant, product, rate, ""))
         end
     end
     return alphadecay

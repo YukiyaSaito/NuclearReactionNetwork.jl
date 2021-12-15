@@ -48,7 +48,7 @@ Probabilistic decay (like ``\\beta^-``decay)
 - `rate::Float64`: The rate of the reaction.
 - `average_number::Vector{Float64}`: A vector of average numbers of species produced.
 """
-mutable struct ProbDecayIO <: AbstractReaction
+mutable struct ProbDecayIO
     """A vector of reactants of the form ``[(Z_0, N_0), (Z_1, N_1), ... (Z_n, N_n)]``"""
     reactant::SVector{1, Tuple{Int, Int}}
     """A vector of products of the form ``[(Z_0, N_0), (Z_1, N_1), ... (Z_n, N_n)]``"""
@@ -57,6 +57,7 @@ mutable struct ProbDecayIO <: AbstractReaction
     rate::Float64
     """A vector of average numbers of species produced."""
     average_number::Vector{Float64}
+    id::String
 end
 
 struct ProbDecay <: AbstractReaction
@@ -64,6 +65,7 @@ struct ProbDecay <: AbstractReaction
     product_idxs::Vector{Int}
     average_number::Vector{Float64}
     rate::Float64
+    id::String
 end
 
 """
@@ -78,7 +80,7 @@ Neutron capture reaction
 - `current_rate::Float64`: Unused field.
 - `q::Union{Missinng, Float64}`: The Q value of the reverse reactionn. Used for the calculation of the reverse rate.
 """
-mutable struct NeutronCaptureIO <: AbstractReaction # Temperature Dependent Reactions
+mutable struct NeutronCaptureIO # Temperature Dependent Reactions
     """A vector of reactants of the form ``[(Z_0, N_0), (Z_1, N_1), ... (Z_n, N_n)]``"""
     reactant::SVector{2, Tuple{Int, Int}}
     """A vector of products of the form ``[(Z_0, N_0), (Z_1, N_1), ... (Z_n, N_n)]``"""
@@ -89,6 +91,7 @@ mutable struct NeutronCaptureIO <: AbstractReaction # Temperature Dependent Reac
     current_rate::Float64 
     """The Q value of the reverse reactionn. Used for the calculation of the reverse rate."""
     q::Union{Nothing, Float64}
+    id::String
 end
 
 struct NeutronCapture <: AbstractReaction
@@ -97,6 +100,7 @@ struct NeutronCapture <: AbstractReaction
     rates_pfuncs_lerp::NcapLerp
     q::Union{Nothing, Float64}
     A_factor::Float64
+    id::String
 end
 
 """
@@ -109,26 +113,29 @@ end
 - `product::Vector{Tuple{Int, Int}}`: A vector of products of the form ``[(Z_0, N_0), (Z_1, N_1)]``
 - `rate::Float64`: The rate of the reaction.
 """
-mutable struct AlphaDecayIO <: AbstractReaction
+mutable struct AlphaDecayIO
     """A tuple of reactants of the form ``(Z, N)``"""
     reactant::Tuple{Int, Int}
     """A vector of products of the form ``[(Z_0, N_0), (Z_1, N_1)]``"""
     product::SVector{2, Tuple{Int, Int}}
     """The rate of the reaction."""
     rate::Float64
+    id::String
 end
 
 struct AlphaDecay <: AbstractReaction
     reactant_idx::Int
     product_idxs::SVector{2, Int}
     rate::Float64
+    id::String
 end
 
-mutable struct ProbRxnIO <: AbstractReaction
+mutable struct ProbRxnIO
     reactants::Vector{Tuple{Int, Int}}
     products::Vector{Tuple{Int, Int}}
     average_numbers::Vector{Float64}
     rates_lerp::RxnLerp
+    id::String
 end
 
 struct ProbRxn <: AbstractReaction
@@ -136,30 +143,35 @@ struct ProbRxn <: AbstractReaction
     product_idxs::Vector{Int}
     average_numbers::Vector{Float64}
     rates_lerp::RxnLerp
+    id::String
 end
 
-struct RxnIO <: AbstractReaction
+mutable struct RxnIO
     reactants::Vector{Tuple{Int, Int}}
     products::Vector{Tuple{Int, Int}}
     rates_lerp::RxnLerp
+    id::String
 end
 
 struct Rxn <: AbstractReaction
     reactant_idxs::Vector{Int}
     product_idxs::Vector{Int}
     rates_lerp::RxnLerp
+    id::String
 end
 
-struct DecayIO <: AbstractReaction
+mutable struct DecayIO
     reactants::Vector{Tuple{Int, Int}}
     products::Vector{Tuple{Int, Int}}
     rate::Float64
+    id::String
 end
 
 struct Decay <: AbstractReaction
     reactant_idxs::Vector{Int}
     product_idxs::Vector{Int}
     rate::Float64
+    id::String
 end
 
 # TODO: Should this be == instead?
@@ -187,12 +199,12 @@ struct Photodissociation
 end
 
 mutable struct ReactionDataIO
-    probdecay::Vector{Tuple{String, ProbDecayIO}}
-    ncap_dict::Dict{Int, NeutronCaptureIO}
-    alphadecay::Vector{AlphaDecayIO}
-    probrxn::Vector{Tuple{String, ProbRxnIO}}
-    rxn::Vector{RxnIO}
-    decay::Vector{DecayIO}
+    probdecay::Dict{Tuple{String, Vector{Int}}, ProbDecayIO}
+    ncap::Dict{Int, NeutronCaptureIO}
+    alphadecay::Dict{Int, AlphaDecayIO}
+    probrxn::Dict{Tuple{String, Vector{Int}}, ProbRxnIO}
+    rxn::Dict{Tuple{Vector{Int}, Vector{Int}}, RxnIO}
+    decay::Dict{Tuple{Vector{Int}, Vector{Int}}, DecayIO}
 end
 
 """

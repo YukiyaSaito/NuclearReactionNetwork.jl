@@ -63,7 +63,7 @@ function newton_raphson_iteration!(nd::NetworkData, Δy::Vector{Float64})::Int
 
     A::SparseMatrixCSC{Float64, Int} = nd.wd.jacobian
     b::Vector{Float64} = ((nd.wd.ydot .- (nd.wd.yproposed .- nd.wd.abundance) ./ nd.wd.time.step))
-    Δy::Vector{Float64} .= solve_linear_system(A, b, nd.wd.solver)
+    Δy::Vector{Float64} .= solve_linear_system(A, b, nd.rd.solver)
     nd.wd.yproposed .+= Δy
 
     num_failed::Int = 0
@@ -88,7 +88,7 @@ function newton_raphson_iteration!(nd::NetworkData, Δy::Vector{Float64})::Int
 
         A = nd.wd.jacobian
         b = ((nd.wd.ydot .- (nd.wd.yproposed .- nd.wd.abundance) ./ nd.wd.time.step))
-        Δy .= solve_linear_system(A, b, nd.wd.solver)
+        Δy .= solve_linear_system(A, b, nd.rd.solver)
         nd.wd.yproposed .+= Δy
     end
     nd.wd.abundance .= nd.wd.yproposed # FIXME: Performance boost: This could be just regular assignment (=, not .=) because of how NetworkDatas is setup

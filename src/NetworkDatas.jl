@@ -22,9 +22,16 @@ export ROData
 export NetworkData
 export OutputInfo
 export Checkpoint
+export Modulator
 export IncludedReactions
 export fill_jacobian!
 export update_ydot!
+
+struct Modulator
+    id::String
+    rxn_type::Type
+    value::Float64
+end
 
 struct Checkpoint
     path::Union{Missing, String}
@@ -95,10 +102,10 @@ struct ROData
     reaction_data::ReactionData
     """Holds the data for the astrophysical trajectory to interpolate (like density and temperature)."""
     trajectory::TrajectoryLerp
-    """Tells us where we should dump the output of the program to."""
-    output_info::OutputInfo
     """Used to know if there are reactions that we can skip for performance."""
     included_reactions::IncludedReactions
+    """The solver used to invert the Jacobian."""
+    solver::LinearSolver
 end
 
 struct RWData
@@ -112,8 +119,9 @@ struct RWData
     time::Time
     """The Jacobian that we have to invert in order to integrate ``\\vec{\\dot{Y}}``."""
     jacobian::SparseMatrixCSC{Float64, Int}
-    """The solver used to invert the Jacobian."""
-    solver::LinearSolver
+    """Tells us where we should dump the output of the program to."""
+    output_info::OutputInfo
+    modulator::Modulator
 end
 
 """
@@ -159,20 +167,31 @@ end
         abundance = nd.wd.yproposed
     end
 
+    use_modulation = nd.wd.modulator.rxn_type == ProbDecay
+
     for decay::ProbDecay in nd.rd.reaction_data.probdecay
+        rate::Float64 = decay.rate
+        if iszero(rate)
+            continue
+        end
+
+        if use_modulation && decay.id == nd.wd.modulator.id
+            rate *= nd.wd.modulator.value
+        end
+
         reactant_idx::Int = decay.reactant_idxs[1]
 
         if iszero(abundance[reactant_idx])
             continue
         end
 
-        nd.wd.ydot[reactant_idx] += -1.0 * decay.rate * abundance[reactant_idx]
+        nd.wd.ydot[reactant_idx] += -1.0 * rate * abundance[reactant_idx]
 
         for (product_idx::Int, average_number::Float64) in zip(decay.product_idxs, decay.average_number)
             if iszero(average_number)
                 continue
             end
-            nd.wd.ydot[product_idx] += average_number * decay.rate * abundance[reactant_idx]
+            nd.wd.ydot[product_idx] += average_number * rate * abundance[reactant_idx]
         end
     end
 end
@@ -183,6 +202,8 @@ end
         abundance = nd.wd.yproposed
     end
 
+    use_modulation = nd.wd.modulator.rxn_type == NeutronCapture
+
     curr_traj::CurrentTrajectory = get_current_trajectory(nd.rd.trajectory, nd.wd.time.current)
     for capture::Union{Nothing, NeutronCapture} in nd.rd.reaction_data.neutroncapture
         if isnothing(capture)
@@ -192,6 +213,10 @@ end
         rate::Float64 = get_rate(capture.rates_pfuncs_lerp, curr_traj.temperature)
         if iszero(rate)
             continue
+        end
+
+        if use_modulation && capture.id == nd.wd.modulator.id
+            rate *= nd.wd.modulator.value
         end
 
         # Grab the product of all the abundances
@@ -224,8 +249,18 @@ end
         abundance = nd.wd.yproposed
     end
 
+    use_modulation = nd.wd.modulator.rxn_type == AlphaDecay
+
     for decay::AlphaDecay in nd.rd.reaction_data.alphadecay
         rate::Float64 = decay.rate
+
+        if iszero(rate)
+            continue
+        end
+
+        if use_modulation && decay.id == nd.wd.modulator.id
+            rate *= nd.wd.modulator.value
+        end
 
         # Grab the abundace of the reactant
         reactant_idx::Int = decay.reactant_idx
@@ -310,6 +345,8 @@ end
         abundance = nd.wd.yproposed
     end
 
+    use_modulation = nd.wd.modulator.rxn_type == ProbRxn
+
     curr_traj::CurrentTrajectory = get_current_trajectory(nd.rd.trajectory, nd.wd.time.current)
 
     for rxn::ProbRxn in nd.rd.reaction_data.probrxn
@@ -317,6 +354,10 @@ end
         rate::Float64 = get_rate(rxn.rates_lerp, curr_traj.temperature)
         if iszero(rate)
             continue
+        end
+
+        if use_modulation && rxn.id == nd.wd.modulator.id
+            rate *= nd.wd.modulator.value
         end
 
         density_factor::Float64 = curr_traj.density^(length(rxn.reactant_idxs) - 1)
@@ -350,6 +391,8 @@ end
         abundance = nd.wd.yproposed
     end
 
+    use_modulation = nd.wd.modulator.rxn_type == Rxn
+
     curr_traj::CurrentTrajectory = get_current_trajectory(nd.rd.trajectory, nd.wd.time.current)
 
     for rxn::Rxn in nd.rd.reaction_data.rxn
@@ -357,6 +400,10 @@ end
         rate::Float64 = get_rate(rxn.rates_lerp, curr_traj.temperature)
         if iszero(rate)
             continue
+        end
+
+        if use_modulation && rxn.id == nd.wd.modulator.id
+            rate *= nd.wd.modulator.value
         end
 
         density_factor::Float64 = curr_traj.density^(length(rxn.reactant_idxs) - 1)
@@ -387,6 +434,8 @@ end
         abundance = nd.wd.yproposed
     end
 
+    use_modulation = nd.wd.modulator.rxn_type == Decay
+
     curr_traj::CurrentTrajectory = get_current_trajectory(nd.rd.trajectory, nd.wd.time.current)
 
     for decay::Decay in nd.rd.reaction_data.decay
@@ -394,6 +443,10 @@ end
         rate::Float64 = decay.rate
         if iszero(rate)
             continue
+        end
+
+        if use_modulation && decay.id == nd.wd.modulator.id
+            rate *= nd.wd.modulator.value
         end
 
         density_factor::Float64 = curr_traj.density^(length(decay.reactant_idxs) - 1)
@@ -458,19 +511,26 @@ end
         abundance = nd.wd.yproposed
     end
 
+    use_modulation = nd.wd.modulator.rxn_type == ProbDecay
+
     for decay::ProbDecay in nd.rd.reaction_data.probdecay
-        if iszero(decay.rate)
+        rate::Float64 = decay.rate
+        if iszero(rate)
             continue
         end
 
+        if use_modulation && decay.id == nd.wd.modulator.id
+            rate *= nd.wd.modulator.value
+        end
+
         reactant_idx::Int = decay.reactant_idxs[1]
-        nd.wd.jacobian[reactant_idx, reactant_idx] += -1.0 * decay.rate
+        nd.wd.jacobian[reactant_idx, reactant_idx] += -1.0 * rate
 
         for (product_idx::Int, average_number::Float64) in zip(decay.product_idxs, decay.average_number)
             if iszero(average_number)
                 continue
             end
-            nd.wd.jacobian[product_idx, reactant_idx] += average_number * decay.rate
+            nd.wd.jacobian[product_idx, reactant_idx] += average_number * rate
         end
     end
 end
@@ -480,6 +540,8 @@ end
     if use_yproposed
         abundance = nd.wd.yproposed
     end
+
+    use_modulation = nd.wd.modulator.rxn_type == NeutronCapture
 
     curr_traj::CurrentTrajectory = get_current_trajectory(nd.rd.trajectory, nd.wd.time.current)
     if iszero(curr_traj.density)
@@ -499,6 +561,10 @@ end
         rate::Float64 = get_rate(capture.rates_pfuncs_lerp, curr_traj.temperature)
         if iszero(rate)
             continue
+        end
+
+        if use_modulation && capture.id == nd.wd.modulator.id
+            rate *= nd.wd.modulator.value
         end
 
         # Reactant index and abundance
@@ -529,12 +595,20 @@ end
         abundance = nd.wd.yproposed
     end
 
+    use_modulation = nd.wd.modulator.rxn_type == AlphaDecay
+
     for decay::AlphaDecay in nd.rd.reaction_data.alphadecay
+        rate::Float64 = decay.rate
+
+        if use_modulation && decay.id == nd.wd.modulator.id
+            rate *= nd.wd.modulator.value
+        end
+
         reactant_idx::Int = decay.reactant_idx
-        nd.wd.jacobian[reactant_idx, reactant_idx] += -1.0 * decay.rate
+        nd.wd.jacobian[reactant_idx, reactant_idx] += -1.0 * rate
 
         for product_idx::Int in decay.product_idxs
-            nd.wd.jacobian[product_idx, reactant_idx] += decay.rate
+            nd.wd.jacobian[product_idx, reactant_idx] += rate
         end
     end
 end
@@ -612,6 +686,8 @@ end
         abundance = nd.wd.yproposed
     end
 
+    use_modulation = nd.wd.modulator.rxn_type == ProbRxn
+
     curr_traj::CurrentTrajectory = get_current_trajectory(nd.rd.trajectory, nd.wd.time.current)
 
     for rxn::ProbRxn in nd.rd.reaction_data.probrxn
@@ -619,6 +695,10 @@ end
         rate::Float64 = get_rate(rxn.rates_lerp, curr_traj.temperature)
         if iszero(rate)
             continue
+        end
+
+        if use_modulation && rxn.id == nd.wd.modulator.id
+            rate *= nd.wd.modulator.value
         end
 
         density_factor::Float64 = curr_traj.density^(length(rxn.reactant_idxs) - 1)
@@ -659,6 +739,8 @@ end
         abundance = nd.wd.yproposed
     end
 
+    use_modulation = nd.wd.modulator.rxn_type == Rxn
+
     curr_traj::CurrentTrajectory = get_current_trajectory(nd.rd.trajectory, nd.wd.time.current)
 
     for rxn::Rxn in nd.rd.reaction_data.rxn
@@ -668,6 +750,10 @@ end
             continue
         end
 
+        if use_modulation && rxn.id == nd.wd.modulator.id
+            rate *= nd.wd.modulator.value
+        end
+
         density_factor::Float64 = curr_traj.density^(length(rxn.reactant_idxs) - 1)
 
         # Double counting factor
@@ -675,36 +761,25 @@ end
         # dc_factor::Float64 = 1/factorial(num_same)
         dc_factor::Float64 = 1.0
 
-        # println("Num Reactants: $(length(rxn.reactant_idxs))")
-        # println("====================================")
         for (i::Int, r1_idx::Int) in enumerate(rxn.reactant_idxs)
             abundance_factor::Float64 = 1.0
             for (j::Int, r2_idx::Int) in enumerate(rxn.reactant_idxs)
-                # println("i: $(i), j: $(j), abundance[j]: $(abundance[r2_idx])")
                 if i != j
                     abundance_factor *= abundance[r2_idx]
                 end
             end
             if iszero(abundance_factor)
-                # continue
+                continue
             end
 
-            # println("abundance_factor: $(abundance_factor)")
-            # println("dy: $(-1.0 * dc_factor * rate * density_factor * abundance_factor)")
-            # println("rate: $(rate)")
-            # println("")
-
             for r2_idx::Int in rxn.reactant_idxs
-                # println("r2: $(r2_idx), r1: $(r1_idx)")
                 nd.wd.jacobian[r2_idx, r1_idx] += -1.0 * dc_factor * rate * density_factor * abundance_factor
-                # println("")
             end
 
             for product_idx::Int in rxn.product_idxs
                 nd.wd.jacobian[product_idx, r1_idx] += dc_factor * rate * density_factor * abundance_factor
             end
         end
-        # println("\n======================\n")
     end
 end
 
@@ -714,6 +789,8 @@ end
         abundance = nd.wd.yproposed
     end
 
+    use_modulation = nd.wd.modulator.rxn_type == Decay
+
     curr_traj::CurrentTrajectory = get_current_trajectory(nd.rd.trajectory, nd.wd.time.current)
 
     for decay::Decay in nd.rd.reaction_data.decay
@@ -721,6 +798,10 @@ end
         rate::Float64 = decay.rate
         if iszero(rate)
             continue
+        end
+
+        if use_modulation && decay.id == nd.wd.modulator.id
+            rate *= nd.wd.modulator.value
         end
 
         density_factor::Float64 = curr_traj.density^(length(decay.reactant_idxs) - 1)
