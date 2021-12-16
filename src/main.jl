@@ -7,7 +7,6 @@ using ..NetworkDatas
 using LinearAlgebra
 using SparseArrays
 using Printf
-using InteractiveUtils
 using Profile
 
 export main
@@ -26,14 +25,29 @@ function read_test(path::String)
     println("Setting BLAS thread count...")
     BLAS.set_num_threads(4)
 
+    println("Num threads: $(Threads.nthreads())")
+
     println("Loading data...")
-    nd::NetworkData = initialize_network_data(path)
-    try
-        println("Solving network...")
-        SolveNetwork!(nd)
-    finally
-        clip_abundance!(nd,1e-15)
-        dump_result(nd)
-        println("Wrote results to disk")
-    end 
+    nds::Vector{NetworkData} = initialize_network_data(path)
+    if length(nds) == 1 || Threads.nthreads() == 1
+        try
+            println("Solving network...")
+            SolveNetwork!(nds[1])
+        finally
+            clip_abundance!(nds[1], 1e-15)
+            dump_result(nds[1])
+            println("Wrote results to disk")
+        end
+    else
+        Threads.@threads for nd in nds
+            try
+                println("Solving network...")
+                SolveNetwork!(nd)
+            finally
+                clip_abundance!(nd, 1e-15)
+                dump_result(nd)
+                println("Wrote results to disk")
+            end
+        end
+    end
 end
