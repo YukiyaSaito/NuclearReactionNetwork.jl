@@ -776,7 +776,8 @@ function read_modulators(entries)
     for entry in entries
         id = entry["id"]
         type = type_dict[entry["rxn_type"]]
-        values = entry["modulation_factors"]
+        path = entry["path"]
+        values = readdlm(path)
         for value in values
             push!(modulators, Modulator(id, type, value))
         end
