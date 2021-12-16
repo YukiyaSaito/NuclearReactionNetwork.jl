@@ -74,3 +74,33 @@ julia> include("test/runtests.jl")
 ```
 
 Notice that julia was run with the flag `-t 4`. To activate the environment, from the julia REPL, type `]activate .`. The `]` character puts you in the package mode and allows you to add and remove packages. Running `activate .` inside the package mode will ensure the file structure of the program is properly loaded in. Then, you should press backspace to get back to the regular julia REPL and run `include("test/runtests.jl")` to actually run the code.
+
+## Creating `.jld` files
+
+There are two acceptable file types as inputs to `NuclearReactionNetwork.jl`. The first is simple ASCII data. This format is human readable, but slower to read in for the program. The file extension of this ASCII data must be `.dat`, as `NuclearReactionNetwork.jl` differentiates between file types exclusively by the extension of the file name.
+
+The second format is an HDF5-like format that is created with the library [JLD2](https://github.com/JuliaIO/JLD2.jl). This format is not human readable, but much faster for the program to read in. The file extension of this data format is normally `.jld`.
+
+To create a `.jld` file from a `.dat` file, you can use the script `dat2jld.jl` located in the `scripts` directory. To use this script you must specify the input `.dat` file, the location of the output `.jld` file, and the type of file the input file is.
+
+Below is an example of how to use the program:
+```sh
+$ julia dat2jld.jl scripts/dat2jld.jl -i /path/to/input/my_decay.dat -o /path/to/output/my_decay.jld -t decay
+```
+
+The `-i` or `--input` flag is used to specify the input file path. The `-o` or `--output` flag is used to specify the output file path. The `-t` or `--type` flag is used to specify the type of file the input file is. The supported types are `decay`, `rxn`, `probrxn`, `ncap`, `probdecay`, `alphadecay`, `photodissociation`, `trajectory`, `initial-composition`, `extent`.
+
+For more help, you can always run `scripts/dat2jld.jl --help`.
+```sh
+$ julia scripts/dat2jld.jl --help
+usage: dat2jld.jl -i INPUT -t TYPE -o OUTPUT [-h]
+
+optional arguments:
+  -i, --input INPUT    Input file path (.dat file)
+  -t, --type TYPE      The type of file. Supported type: decay, rxn,
+                       probrxn, ncap, probdecay, alphadecay,
+                       photodissociation, trajectory,
+                       initial-composition, extent
+  -o, --output OUTPUT  Output file path (.jld file)
+  -h, --help           show this help message and exit
+```
